@@ -23,11 +23,12 @@ const produceSchema = new mongoose.Schema(
       enum: ["kg", "quintal", "ton"],
       required: true,
     },
-    quality: {
-      type: String,
-      enum: ["Grade A", "Grade B", "Grade C"],
-      default: "Grade A",
-    },
+    
+quality: {
+  type: String,
+  enum: ["Grade A", "Grade B", "Grade C", "Not sure"],
+  default: "Not sure",
+},
     date: {
       type: String,
       required: true,
@@ -47,6 +48,11 @@ const produceSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    
+images: {
+  type: [String],
+  default: [],
+},
     status: {
       type: String,
       enum: ["Available", "Unavailable"],

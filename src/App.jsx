@@ -1,18 +1,31 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
-import axios from "axios";
+
 import {
-  Sprout,
-  LogOut,
-  LayoutDashboard,
-  Package,
-  Inbox,
-  Search,
-  ClipboardList,
-  Handshake,
-  CheckCircle2,
-  MapPin,
-  CalendarDays
+BrowserRouter,
+Routes,
+Route,
+Link,
+useNavigate,
+useParams,
+useSearchParams,
+useLocation,
+Navigate,
+} from "react-router-dom";
+
+import axios from "axios";
+
+import {
+Sprout,
+LogOut,
+LayoutDashboard,
+Package,
+Inbox,
+Search,
+ClipboardList,
+Handshake,
+CheckCircle2,
+MapPin,
+CalendarDays,
 } from "lucide-react";
 
 // ---------- Mock data (replace with API calls later) ----------
@@ -125,22 +138,83 @@ function Page({ role, children }) {
     </button>
   </div>
 </aside>
-      <main className="md:ml-60 flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 bg-[#fafaf7] min-h-screen">{children}</main>
-    </div>
+<main className="md:ml-60 min-h-screen min-w-0 flex-1
+  bg-[#fafaf7] px-4 py-5 sm:px-6 sm:py-7
+  lg:px-10 lg:py-8">
+  <div className="mx-auto w-full max-w-[1440px] space-y-7">
+    {children}
+  </div>
+</main>    </div>
   );
 }
 
-const Table = ({ heads, rows }) => (
+
+const Table = ({
+  heads,
+  rows,
+  rowIds = [],
+  highlightedId = null,
+  onRowClick = null,
+}) => (
   <div className={`${cardBase} overflow-x-auto`}>
     <table className="w-full text-sm">
-      <thead className="bg-green-50 text-left text-xs uppercase tracking-wide text-green-900"><tr>{heads.map((h) => <th key={h} className="p-3 font-semibold">{h}</th>)}</tr></thead>
+      <thead className="bg-green-50 text-left text-xs uppercase tracking-wide text-green-900">
+        <tr>
+          {heads.map((h) => (
+            <th key={h} className="p-3 font-semibold">
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+
       <tbody>
-        {rows.length === 0 && <tr><td className="p-8 text-center text-stone-500" colSpan={heads.length}>🌱 Nothing here yet.</td></tr>}
-        {rows.map((r, i) => <tr key={i} className="border-t border-stone-100 hover:bg-stone-50">{r.map((c, j) => <td key={j} className="p-3">{c}</td>)}</tr>)}
+        {rows.length === 0 && (
+          <tr>
+            <td
+              className="p-8 text-center text-stone-500"
+              colSpan={heads.length}
+            >
+              🌱 Nothing here yet.
+            </td>
+          </tr>
+        )}
+
+        {rows.map((r, i) => {
+          const id = rowIds[i];
+          const isHighlighted =
+            highlightedId && id === highlightedId;
+
+          return (
+            <tr
+              key={id || i}
+              id={id ? `produce-${id}` : undefined}
+              onClick={
+                onRowClick && id
+                  ? () => onRowClick(id)
+                  : undefined
+              }
+              className={`border-t border-stone-100 transition-colors ${
+                onRowClick && id ? "cursor-pointer" : ""
+              } ${
+                isHighlighted
+                  ? "bg-green-100 ring-2 ring-inset ring-green-600"
+                  : "hover:bg-stone-50"
+              }`}
+            >
+              {r.map((c, j) => (
+                <td key={j} className="p-3">
+                  {c}
+                </td>
+              ))}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   </div>
 );
+
 const Stat = ({ n, label }) => {
   const Icon = /Listing/.test(label) ? Package : /Requirement/.test(label) ? ClipboardList : /Request/.test(label) ? Inbox : Handshake;
   return (
@@ -969,68 +1043,396 @@ function Register() {
 }
 
 // ---------- Farmer ----------
+
+function DashboardNotifications({ role, conns, produce, users }) {
+  const { user } = useApp();
+
+  const storageKey = `agrisetu_notifications_read_${user?._id}`;
+
+  const [readIds, setReadIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(readIds));
+  }, [readIds, storageKey]);
+
+  const notifications = conns
+    .filter((c) =>
+      role === "farmer"
+        ? produce.some(
+            (p) =>
+              p._id === c.produceId &&
+              p.farmerId === user?._id
+          )
+        : c.buyerId === user?._id
+    )
+    .map((c) => {
+      const item = produce.find(
+        (p) => p._id === c.produceId
+      );
+
+      const otherUserId =
+        role === "farmer" ? c.buyerId : item?.farmerId;
+
+      const otherUser = (users || []).find(
+  (u) => u._id === otherUserId
+);
+
+      const crop = item?.crop || "produce";
+
+      let message = "";
+
+      if (c.status === "accepted") {
+        message =
+          role === "farmer"
+            ? `Your connection for ${crop} has been accepted.`
+            : `Your request for ${crop} has been accepted.`;
+      } else if (c.status === "rejected") {
+        message =
+          `Your request for ${crop} was rejected.`;
+      } else {
+        message =
+          role === "farmer"
+            ? `A buyer has requested ${crop} from your listing.`
+            : `Your request for ${crop} is awaiting a response.`;
+      }
+
+      return {
+        id: String(c._id),
+        crop,
+        message,
+        name: otherUser?.name || (
+          role === "farmer" ? "Buyer" : "Farmer"
+        ),
+        status: c.status || "pending",
+      };
+    })
+    .reverse();
+
+  const unreadCount = notifications.filter(
+    (n) => !readIds.includes(n.id)
+  ).length;
+  
+if (notifications.length === 0 || unreadCount === 0) {
+  return null;
+}
+
+
+
+  return (
+    <section className={`${cardBase} p-5 sm:p-6`}>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-xl font-semibold text-green-950">
+            Notifications
+          </h2>
+          <p className="text-sm text-stone-500 mt-1">
+            Request and connection updates
+          </p>
+        </div>
+
+        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+          {unreadCount} unread
+        </span>
+      </div>
+
+      {notifications.length === 0 ? (
+        <div className="rounded-xl bg-green-50/70 px-4 py-6 text-center">
+          <p className="font-medium text-green-900">
+            You're all caught up
+          </p>
+          <p className="text-sm text-stone-500 mt-1">
+            New request updates will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((n) => {
+            const isRead = readIds.includes(n.id);
+
+            return (
+              <article
+                key={n.id}
+                className={`rounded-xl border p-4 ${
+                  isRead
+                    ? "border-stone-200 bg-white"
+                    : "border-green-200 bg-green-50"
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-green-950">
+                        {n.status === "accepted"
+                          ? "Request accepted"
+                          : n.status === "rejected"
+                          ? "Request rejected"
+                          : "Connection update"}
+                      </h3>
+
+                      {!isRead && (
+                        <span className="rounded-full bg-green-700 px-2 py-0.5 text-xs font-medium text-white">
+                          Unread
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-stone-600 mt-1">
+                      {n.message}
+                    </p>
+
+                    <p className="text-xs text-stone-500 mt-2">
+                      {n.name} · {n.crop}
+                    </p>
+                  </div>
+
+                  {!isRead && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReadIds((previous) =>
+                          previous.includes(n.id)
+                            ? previous
+                            : [...previous, n.id]
+                        )
+                      }
+                      className={btn2}
+                    >
+                      Mark as read
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FarmerFeedback() {
+  const { user } = useApp();
+
+  if (!user?._id) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="font-serif text-2xl font-semibold text-green-900">
+        Buyer Feedback
+      </h2>
+      <p className="mt-1 text-sm text-stone-600">
+        View your ratings and feedback from buyers.
+      </p>
+
+      <ProduceReviews farmerId={user._id} />
+    </section>
+  );
+}
+
 function FarmerDash() {
-  const { user, produce, conns } = useApp();
-  const mine = produce.filter((p) => p.farmerId === user._id);
-  const reqs = conns.filter((c) => mine.some((p) => p._id === c.produceId));
+  
+const { user, produce, conns, users } = useApp();  const mine = produce.filter((p) => p.farmerId === user._id);
+const farmerId = user?._id;  
+const reqs = conns.filter((c) => mine.some((p) => p._id === c.produceId));
+  const navigate = useNavigate();
   return (
     <Page role="farmer">
+      <h1 className="rounded-2xl bg-green-950 px-5 py-4
+  font-serif text-2xl font-semibold text-white
+  shadow-sm sm:px-7 sm:py-5 sm:text-3xl">
+  Farmer Dashboard
+</h1>
       <div><h1 className="font-serif text-3xl font-semibold text-green-900">Welcome, {user.name.split(" ")[0]} 👋</h1><p className="text-stone-500 text-sm mt-1">Here is what is happening with your produce today.</p></div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Stat n={mine.filter((p) => p.status === "Available").length} label="Active Listings" />
         <Stat n={reqs.length} label="Buyer Requests" />
         <Stat n={reqs.filter((c) => c.status === "accepted").length} label="Connections" />
       </div>
-      <h2 className="font-semibold text-lg text-green-900">Recent Produce</h2>
-      <Table heads={["Crop", "Quantity", "Quality", "Status"]} rows={mine.slice(0, 5).map((p) => [p.crop, `${p.quantity} ${p.unit}`, p.quality, <Badge s={p.status} />])} />
+      <DashboardNotifications
+  role="farmer"
+  conns={conns}
+  produce={produce}
+  users={users}
+/>
+
+
+
+<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+  <h2 className="font-semibold text-lg text-green-900">
+    Recent Produce
+  </h2>
+
+  <span className="text-sm text-green-700">
+    Select a crop to view it in My Produce →
+  </span>
+</div>
+
+<Table
+  heads={["Crop", "Quantity", "Quality", "Status", ""]}
+  rows={mine.slice(0, 5).map((p) => [
+    p.crop,
+    `${p.quantity} ${p.unit}`,
+    p.quality,
+    <Badge s={p.status} />,
+    <span className="text-lg font-semibold text-green-700">
+  →
+</span>,
+  ])}
+  rowIds={mine.slice(0, 5).map((p) => p._id)}
+  onRowClick={(id) =>
+    navigate(`/farmer/produce?highlight=${id}`)
+  }
+/>
+
     </Page>
   );
 }
 
+
+
 function FarmerProduce() {
   const { user, produce, setProduce } = useApp();
   const [q, setQ] = useState("");
-  const rows = produce.filter((p) => p.farmerId === user._id && p.crop.toLowerCase().includes(q.toLowerCase()));
-  
-const deleteProduce = async (p) => {
-  if (!window.confirm(`Delete ${p.crop}?`)) return;
 
-  try {
-    await api.delete(`/produce/${p._id}`);
+  const [searchParams] = useSearchParams();
+  const highlightedId = searchParams.get("highlight");
+  const navigate = useNavigate();
 
-    setProduce((previous) =>
-      previous.filter((item) => item._id !== p._id)
-    );
-  } catch (error) {
-    alert(
-      error.response?.data?.message ||
-      "Unable to delete produce. Please try again."
-    );
-  }
-};
+  // Filter produce before using rows in useEffect
+  const rows = produce.filter(
+    (p) =>
+      p.farmerId === user._id &&
+      p.crop.toLowerCase().includes(q.toLowerCase())
+  );
+
+  // Scroll to and highlight the selected produce
+  useEffect(() => {
+    if (
+      !highlightedId ||
+      !rows.some((p) => p._id === highlightedId)
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      document
+        .getElementById(`produce-${highlightedId}`)
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [highlightedId, rows.length]);
+
+  const deleteProduce = async (p) => {
+    if (!window.confirm(`Delete ${p.crop}?`)) return;
+
+    try {
+      await api.delete(`/produce/${p._id}`);
+
+      setProduce((previous) =>
+        previous.filter((item) => item._id !== p._id)
+      );
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          "Unable to delete produce. Please try again."
+      );
+    }
+  };
+
+  // Keep your existing return (...) JSX below this point
 
 
   return (
     <Page role="farmer">
       <div className="flex items-center gap-3">
-        <h1 className="font-serif text-3xl font-semibold text-green-900">My Produce</h1>
-        <Link to="/farmer/produce/add" className={`${btn} ml-auto`}>+ Add Produce</Link>
+        <h1 className="font-serif text-3xl font-semibold text-green-900">
+          My Produce
+        </h1>
+
+        <Link to="/farmer/produce/add" className={`${btn} ml-auto`}>
+          + Add Produce
+        </Link>
       </div>
-      <input className={inp} placeholder="Search by crop..." value={q} onChange={(e) => setQ(e.target.value)} />
-      <Table heads={["Crop", "Quantity", "Quality", "Location", "Available", "Status", "Actions"]}
-        rows={rows.map((p) => [p.crop, `${p.quantity} ${p.unit}`, p.quality, p.district, p.date, <Badge s={p.status} />,
-          <span className="flex gap-3 text-green-800">
-            <Link to={`/farmer/produce/${p._id}/edit`}>Edit</Link>
-<button
-  className="text-red-600"
-  onClick={() => deleteProduce(p)}
->
-  Delete
-</button>
-          </span>])} />
+
+      <input
+        className={inp}
+        placeholder="Search by crop..."
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+
+    
+
+<Table
+  heads={[
+    "Image",
+    "Crop",
+    "Quantity",
+    "Quality",
+    "Location",
+    "Available",
+    "Status",
+    "Actions",
+  ]}
+  rows={rows.map((p) => [
+    p.images?.length > 0 ? (
+      <img
+        src={p.images[0]}
+        alt={p.crop}
+        className="h-16 w-16 rounded-lg object-cover"
+      />
+    ) : (
+      <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-green-50 text-2xl">
+        🌱
+      </div>
+    ),
+    p.crop,
+    `${p.quantity} ${p.unit}`,
+    p.quality,
+    p.district || "—",
+    p.date || "—",
+    <Badge s={p.status} />,
+    <span className="flex gap-3 text-green-800">
+      <Link
+        to={`/farmer/produce/${p._id}/edit`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        Edit
+      </Link>
+
+      <button
+        type="button"
+        className="text-red-600"
+        onClick={(e) => {
+          e.stopPropagation();
+          deleteProduce(p);
+        }}
+      >
+        Delete
+      </button>
+    </span>,
+  ])}
+  rowIds={rows.map((p) => p._id)}
+  highlightedId={highlightedId}
+  onRowClick={(id) =>
+    navigate(`/farmer/produce?highlight=${id}`)
+  }
+/>
     </Page>
   );
 }
+
+
 
 
 function ProduceForm() {
@@ -1041,38 +1443,128 @@ function ProduceForm() {
   const old = produce.find((p) => p._id === id);
 
   const [f, setF] = useState(() => old || {
-    crop: "",
-    quantity: "",
-    unit: "kg",
-    quality: "Grade A",
-    date: "",
-    district: user?.district || "",
-    state: user?.state || "",
-    description: ""
-  });
+  crop: "",
+  quantity: "",
+  unit: "kg",
+  quality: "Not sure",
+  date: "",
+  district: user?.district || "",
+  state: user?.state || "",
+  description: "",
+  images: [],
+});
 
   const [err, setErr] = useState("");
+  
+const [photoItems, setPhotoItems] = useState(() =>
+  (old?.images || []).map((url) => ({
+    url,
+    existing: true,
+  }))
+);
 
-  useEffect(() => {
-    if (id && old) {
-      setF({
-        crop: old.crop || "",
-        quantity: old.quantity ?? "",
-        unit: old.unit || "kg",
-        quality: old.quality || "Grade A",
-        date: old.date || "",
-        district: old.district || "",
-        state: old.state || "",
-        description: old.description || ""
-      });
-    }
-  }, [id, old?._id]);
+const handlePhotoChange = async (event) => {
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
+
+  setErr("");
+
+  const currentCount = photoItems.length;
+
+  if (currentCount + files.length > 5) {
+    setErr("You can upload up to five photos in total.");
+    return;
+  }
+
+  const validTypes = ["image/jpeg", "image/png", "image/webp"];
+  const maxFileSize = 1024 * 1024;
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+
+  if (files.some((file) => !validTypes.includes(file.type))) {
+    setErr("Please select JPG, PNG, or WebP images only.");
+    return;
+  }
+
+  if (files.some((file) => file.size > maxFileSize)) {
+    setErr("Each photo must be 1 MB or smaller.");
+    return;
+  }
+ 
+  const existingNewSize = photoItems
+    .filter((item) => !item.existing)
+    .reduce((sum, item) => sum + (item.file?.size || 0), 0);
+
+  if (existingNewSize + totalSize > 5 * 1024 * 1024) {
+    setErr("The combined size of new photos must be 5 MB or smaller.");
+    return;
+  }
+
+  try {
+    const newItems = await Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = () =>
+              resolve({
+                url: reader.result,
+                file,
+                existing: false,
+              });
+
+            reader.onerror = () =>
+              reject(new Error("Unable to read one of the selected photos."));
+
+            reader.readAsDataURL(file);
+          })
+      )
+    );
+
+    setPhotoItems((previous) => [...previous, ...newItems]);
+  } catch (error) {
+    setErr(error.message || "Unable to read selected photos.");
+  }
+};
+
+
+
+const removePhoto = (index) => {
+  setPhotoItems((previous) =>
+    previous.filter((_, i) => i !== index)
+  );
+};
+
+useEffect(() => {
+  if (id && old) {
+    setF({
+      crop: old.crop || "",
+      quantity: old.quantity ?? "",
+      unit: old.unit || "kg",
+      quality: old.quality || "Not sure",
+      date: old.date || "",
+      district: old.district || "",
+      state: old.state || "",
+      description: old.description || "",
+    });
+
+    setPhotoItems(
+      (old.images || []).map((url) => ({
+        url,
+        existing: true,
+      }))
+    );
+  }
+}, [id, old?._id]);
+
+
 
   const set = (k) => (e) =>
     setF((previous) => ({
       ...previous,
       [k]: e.target.value
     }));
+
 const submit = async () => {
   if (
     !f.crop.trim() ||
@@ -1081,7 +1573,13 @@ const submit = async () => {
     !f.district.trim() ||
     !f.state.trim()
   ) {
-    return setErr("Crop, quantity, date, district and state are required.");
+    return setErr(
+      "Crop, quantity, available date, district and state are required."
+    );
+  }
+
+  if (photoItems.length > 5) {
+    return setErr("You can upload up to five photos.");
   }
 
   setErr("");
@@ -1095,11 +1593,16 @@ const submit = async () => {
     district: f.district.trim(),
     state: f.state.trim(),
     description: f.description || "",
+    images: photoItems.map((item) => item.url),
   };
 
   try {
     if (old) {
-      const response = await api.patch(`/produce/${old._id}`, data);
+      const response = await api.patch(
+        `/produce/${old._id}`,
+        data
+      );
+
       const updatedProduce = response.data.produce;
 
       setProduce((previous) =>
@@ -1116,11 +1619,20 @@ const submit = async () => {
 
     nav("/farmer/produce");
   } catch (error) {
-    setErr(
-      error.response?.data?.message ||
-      "Unable to save produce. Please try again."
-    );
-  }
+console.error("Update produce error:", {
+message: error.message,
+status: error.response?.status,
+response: error.response?.data,
+});
+
+setErr(
+error.response?.data?.message ||
+(error.code === "ERR_NETWORK"
+? "Cannot connect to the backend. Check that the server is running."
+: `Unable to save produce${error.response?.status ? ` (${error.response.status})` : ""}. Please try again.`)
+);
+}
+
 };
 
 
@@ -1142,62 +1654,248 @@ if (id && !old && !produceLoading) {
     </Page>
   );
 }
-  return (
-    <Page role="farmer">
-      <div className={`${card} max-w-xl space-y-3`}>
-        <h1 className="text-xl font-bold text-green-900">{old ? "Edit Produce" : "Add Produce"}</h1>
-        <input className={inp} placeholder="Crop name" value={f.crop} onChange={set("crop")} />
-        <div className="grid grid-cols-2 gap-2">
-          <input className={inp} type="number" placeholder="Quantity" value={f.quantity} onChange={set("quantity")} />
-          <select className={inp} value={f.unit} onChange={set("unit")}><option>kg</option><option>quintal</option><option>ton</option></select>
-          <select className={inp} value={f.quality} onChange={set("quality")}><option>Grade A</option><option>Grade B</option><option>Grade C</option></select>
-          <input className={inp} type="date" value={f.date} onChange={set("date")} />
-          <input className={inp} placeholder="District" value={f.district} onChange={set("district")} />
-          <input className={inp} placeholder="State" value={f.state} onChange={set("state")} />
+
+return (
+  <Page role="farmer">
+    <div className={`${card} max-w-xl space-y-3`}>
+      <h1 className="text-xl font-bold text-green-900">
+        {old ? "Edit Produce" : "Add Produce"}
+      </h1>
+
+      <input
+        className={inp}
+        placeholder="Crop name"
+        value={f.crop}
+        onChange={set("crop")}
+        required
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          className={inp}
+          type="number"
+          min="0.01"
+          step="any"
+          placeholder="Quantity"
+          value={f.quantity}
+          onChange={set("quantity")}
+          required
+        />
+
+        <select
+          className={inp}
+          value={f.unit}
+          onChange={set("unit")}
+          required
+        >
+          <option value="kg">kg</option>
+          <option value="quintal">quintal</option>
+          <option value="ton">ton</option>
+        </select>
+
+        <select
+          className={inp}
+          value={f.quality}
+          onChange={set("quality")}
+          required
+        >
+          <option value="Grade A">Grade A — Premium</option>
+          <option value="Grade B">Grade B — Standard</option>
+          <option value="Grade C">Grade C — Economy</option>
+          <option value="Not sure">Not sure</option>
+        </select>
+
+        <div className="col-span-2">
+          <p className="text-xs text-stone-500">
+            Choose based on the produce's appearance and condition.
+            Your selected grade is farmer-declared.
+          </p>
         </div>
-        <textarea className={inp} placeholder="Description" value={f.description} onChange={set("description")} />
-        {err && <p className="text-red-600 text-sm">{err}</p>}
-        <div className="flex gap-2"><button className={btn} onClick={submit}>{old ? "Update" : "Add Produce"}</button><button className={btn2} onClick={() => nav("/farmer/produce")}>Cancel</button></div>
+
+        <div className="col-span-2 space-y-1">
+          <label className="block text-sm font-medium text-gray-700">
+            Available from
+          </label>
+          <p className="text-xs text-stone-500">
+            The date when this produce is ready for buyers to collect
+            or arrange delivery.
+          </p>
+          <input
+            className={inp}
+            type="date"
+            value={f.date}
+            onChange={set("date")}
+            required
+          />
+        </div>
+
+        <input
+          className={inp}
+          placeholder="District"
+          value={f.district}
+          onChange={set("district")}
+          required
+        />
+
+        <input
+          className={inp}
+          placeholder="State"
+          value={f.state}
+          onChange={set("state")}
+          required
+        />
       </div>
-    </Page>
-  );
+
+      <textarea
+        className={inp}
+        placeholder="Description"
+        value={f.description}
+        onChange={set("description")}
+      />
+
+      {/* Produce photo upload */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          Produce photos
+        </label>
+
+        <p className="text-xs text-stone-500">
+          Upload clear photos of your actual crop. JPG, PNG, or WebP.
+          Maximum 1 MB per photo and five photos in total.
+        </p>
+
+        <input
+          className={inp}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          onChange={handlePhotoChange}
+        />
+
+        {photoItems.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {photoItems.map((item, index) => (
+              <div
+                key={`${index}-${item.url.slice(0, 40)}`}
+                className="relative overflow-hidden rounded-xl border"
+              >
+                <img
+                  src={item.url}
+                  alt={`Produce photo ${index + 1}`}
+                  className="h-32 w-full object-cover"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => removePhoto(index)}
+                  className="absolute right-2 top-2 rounded-full bg-white px-2 py-1 text-sm text-red-600 shadow"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {err && (
+        <p className="text-red-600 text-sm">{err}</p>
+      )}
+
+      <div className="flex gap-2">
+        <button className={btn} onClick={submit}>
+          {old ? "Update" : "Add Produce"}
+        </button>
+
+        <button
+          type="button"
+          className={btn2}
+          onClick={() => nav("/farmer/produce")}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </Page>
+);
+
+
 }
 
 
-function FarmerRequests({ onlyAccepted }) {
+
+function FarmerRequests({ onlyAccepted = false }) {
   const { user, users, produce, conns, setConns } = useApp();
+
+  const [farmerReviews, setFarmerReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadReviews = async () => {
+      setReviewsLoading(true);
+
+      try {
+        const response = await api.get(
+          `/reviews/farmer/${encodeURIComponent(user._id)}`
+        );
+
+        if (!cancelled) {
+          setFarmerReviews(response.data.reviews || []);
+        }
+      } catch (error) {
+        console.error(
+          "Unable to load farmer reviews:",
+          error.response?.data || error.message
+        );
+
+        if (!cancelled) setFarmerReviews([]);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+
+    if (onlyAccepted && user?._id) {
+      loadReviews();
+    } else {
+      setFarmerReviews([]);
+      setReviewsLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onlyAccepted, user?._id]);
 
   const rows = conns
     .map((c) => ({
       c,
-      p: produce.find((p) => p._id === c.produceId),
-      b: users.find((u) => u._id === c.buyerId),
+      p: produce.find((p) => String(p._id) === String(c.produceId)),
+      b: users.find((u) => String(u._id) === String(c.buyerId)),
     }))
     .filter(
-      (x) =>
-        x.p?.farmerId === user?._id &&
-        (!onlyAccepted || x.c.status === "accepted")
+      ({ p, c }) =>
+        p?.farmerId === user?._id &&
+        (!onlyAccepted || c.status === "accepted")
     );
 
-  
-const upd = async (id, status) => {
-  try {
-    await api.patch(`/connections/${id}/status`, { status });
+  const upd = async (id, status) => {
+    try {
+      await api.patch(`/connections/${id}/status`, { status });
 
-    setConns((previous) =>
-      previous.map((c) =>
-        c._id === id ? { ...c, status } : c
-      )
-    );
-  } catch (error) {
-    alert(
-      error.response?.data?.message ||
-        "Unable to update request."
-    );
-  }
-};
-
-
+      setConns((previous) =>
+        previous.map((c) =>
+          String(c._id) === String(id) ? { ...c, status } : c
+        )
+      );
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          "Unable to update request."
+      );
+    }
+  };
 
   return (
     <Page role="farmer">
@@ -1211,80 +1909,711 @@ const upd = async (id, status) => {
           "Crop",
           "Status",
           onlyAccepted ? "Contact" : "Actions",
+          ...(onlyAccepted ? ["Rating & Review"] : []),
         ]}
-        rows={rows.map(({ c, p, b }) => [
-          b?.name || "Buyer information unavailable",
-          p?.crop || "Produce unavailable",
-          <Badge s={c.status} />,
-          onlyAccepted ? (
-            c.status === "accepted" && b
-              ? `${b.phone || "No phone"} · ${b.email || "No email"}`
-              : "Buyer contact unavailable"
-          ) : c.status === "pending" ? (
-            <span className="flex gap-2">
-              <button
-                className={btn}
-                onClick={() => upd(c._id, "accepted")}
-              >
-                Accept
-              </button>
-              <button
-                className={btn2}
-                onClick={() => upd(c._id, "rejected")}
-              >
-                Reject
-              </button>
-            </span>
-          ) : (
-            "-"
-          ),
-        ])}
+        rows={rows.map(({ c, p, b }) => {
+          const review = farmerReviews.find(
+            (r) =>
+              String(r.connectionId?._id || r.connectionId) ===
+              String(c._id)
+          );
+
+          return [
+            b?.name || "Buyer information unavailable",
+            p?.crop || "Produce unavailable",
+            <Badge s={c.status} />,
+            onlyAccepted ? (
+              `${b?.phone || "No phone"} · ${b?.email || "No email"}`
+            ) : c.status === "pending" ? (
+              <span className="flex flex-wrap gap-2">
+                <button
+                  className={btn}
+                  onClick={() => upd(c._id, "accepted")}
+                >
+                  Accept
+                </button>
+                <button
+                  className={btn2}
+                  onClick={() => upd(c._id, "rejected")}
+                >
+                  Reject
+                </button>
+              </span>
+            ) : (
+              <span className="text-green-700 font-medium">
+    Connected
+  </span>
+            ),
+            ...(onlyAccepted
+              ? [
+                  reviewsLoading ? (
+                    <span className="text-stone-500">
+                      Loading reviews...
+                    </span>
+                  ) : review ? (
+                    <div className="min-w-40">
+                      <div className="font-medium text-amber-600">
+                        {"★".repeat(
+                          Math.max(
+                            0,
+                            Math.min(5, Number(review.overallRating) || 0)
+                          )
+                        )}
+                        {"☆".repeat(
+                          5 -
+                            Math.max(
+                              0,
+                              Math.min(5, Number(review.overallRating) || 0)
+                            )
+                        )}
+                        <span className="ml-1 text-stone-700">
+                          {review.overallRating}/5
+                        </span>
+                      </div>
+
+                      <p className="mt-1 text-xs text-stone-600">
+                        Quality: {review.qualityRating}/5 · Service:{" "}
+                        {review.serviceRating}/5
+                      </p>
+
+                      {review.comment && (
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">
+                          {review.comment}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-stone-500">
+                      No review yet
+                    </span>
+                  ),
+                ]
+              : []),
+          ];
+        })}
       />
     </Page>
   );
 }
 
 
+    
+function StarRating({ value = 0, onChange, size = "text-2xl" }) {
+return ( <div className="flex items-center gap-1" role="group" aria-label="Rating">
+{[1, 2, 3, 4, 5].map((star) => (
+<button
+key={star}
+type="button"
+disabled={!onChange}
+onClick={() => onChange?.(star)}
+aria-label={`${star} out of 5 stars`}
+className={`${size} ${
+            star <= value ? "text-amber-500" : "text-stone-300"
+          } ${onChange ? "cursor-pointer" : "cursor-default"}`}
+>
+★ </button>
+))} </div>
+);
+}
+
+function ConnectionReviewForm({ connection, onSubmitted }) {
+const [qualityRating, setQualityRating] = useState(0);
+const [serviceRating, setServiceRating] = useState(0);
+const [overallRating, setOverallRating] = useState(0);
+const [comment, setComment] = useState("");
+const [loading, setLoading] = useState(false);
+const [message, setMessage] = useState("");
+const [success, setSuccess] = useState(false);
+
+const submitReview = async (event) => {
+event.preventDefault();
+setMessage("");
+setSuccess(false);
+
+
+if (!qualityRating || !serviceRating || !overallRating) {
+  setMessage("Please select all three ratings.");
+  return;
+}
+
+try {
+  setLoading(true);
+
+  await api.post("/reviews", {
+    connectionId: connection._id,
+    qualityRating,
+    serviceRating,
+    overallRating,
+    comment: comment.trim(),
+  });
+
+  setSuccess(true);
+  setMessage("Review published successfully.");
+
+  onSubmitted?.(connection._id);
+} catch (error) {
+  setMessage(
+    error.response?.data?.message ||
+      "Unable to submit your review. Please try again."
+  );
+} finally {
+  setLoading(false);
+}
+
+
+};
+
+return ( <form
+   onSubmit={submitReview}
+   className="mt-4 space-y-4 border-t border-stone-200 pt-4"
+ > <h3 className="font-semibold text-green-900">
+Rate your experience </h3>
+
+
+  {[
+    {
+      label: "Produce quality",
+      value: qualityRating,
+      change: setQualityRating,
+    },
+    {
+      label: "Communication and service",
+      value: serviceRating,
+      change: setServiceRating,
+    },
+    {
+      label: "Overall experience",
+      value: overallRating,
+      change: setOverallRating,
+    },
+  ].map((item) => (
+    <div key={item.label}>
+      <p className="mb-1 text-sm font-medium text-stone-700">
+        {item.label}
+      </p>
+      <StarRating
+        value={item.value}
+        onChange={item.change}
+      />
+    </div>
+  ))}
+
+  <div>
+    <label className="mb-1 block text-sm font-medium text-stone-700">
+      Comment (optional)
+    </label>
+
+    <textarea
+      value={comment}
+      onChange={(event) => setComment(event.target.value)}
+      maxLength={1000}
+      rows={3}
+      placeholder="Share your experience with this farmer..."
+      className="w-full rounded-xl border border-stone-300 p-3 text-sm outline-none focus:border-green-700"
+    />
+
+    <p className="text-right text-xs text-stone-500">
+      {comment.length}/1000
+    </p>
+  </div>
+
+  {message && (
+    <p
+      aria-live="polite"
+      className={`text-sm ${
+        success ? "text-green-800" : "text-red-700"
+      }`}
+    >
+      {message}
+    </p>
+  )}
+
+  {!success && (
+    <button
+      type="submit"
+      disabled={loading}
+      className="w-full rounded-xl bg-green-800 px-4 py-3 font-medium text-white hover:bg-green-900 disabled:opacity-60 sm:w-auto"
+    >
+      {loading ? "Publishing..." : "Publish review"}
+    </button>
+  )}
+</form>
+
+
+);
+}
+
+
+function ProduceReviews({ produceId, farmerId }) {
+const [data, setData] = useState({
+averageRating: 0,
+reviewCount: 0,
+reviews: [],
+});
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
+
+useEffect(() => {
+if (!farmerId) return;
+
+
+let cancelled = false;
+
+const loadReviews = async () => {
+  try {
+    setLoading(true);
+    setError("");
+
+    const endpoint = produceId
+      ? `/reviews/produce/${encodeURIComponent(produceId)}`
+      : `/reviews/farmer/${encodeURIComponent(farmerId)}`;
+
+    const response = await api.get(endpoint);
+
+    if (cancelled) return;
+
+const fetchedReviews = response.data.reviews || [];
+
+const reviews = [
+  ...new Map(
+    fetchedReviews.map((review) => [String(review._id), review])
+  ).values(),
+];
+    setData({
+      averageRating:
+        response.data.averageRating ??
+        (reviews.length
+          ? reviews.reduce((sum, review) => sum + review.overallRating, 0) /
+            reviews.length
+          : 0),
+      reviewCount: response.data.reviewCount ?? reviews.length,
+      reviews,
+    });
+  } catch {
+    if (!cancelled) {
+      setError("Reviews could not be loaded. Please try again later.");
+    }
+  } finally {
+    if (!cancelled) setLoading(false);
+  }
+};
+
+loadReviews();
+
+return () => {
+  cancelled = true;
+};
+
+
+}, [produceId, farmerId]);
+
+return (
+  <section className="mt-8">
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 className="font-serif text-2xl font-semibold text-green-900">
+          Buyer reviews
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Feedback from buyers who connected with farmers.
+        </p>
+      </div>
+
+      {!loading && !error && (
+        <div className="rounded-xl bg-green-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-semibold text-green-900">
+              {Number(data.averageRating).toFixed(1)}
+            </span>
+            <StarRating
+              value={Math.round(data.averageRating)}
+              size="text-lg"
+            />
+          </div>
+          <p className="text-xs text-stone-600">
+            {data.reviews.length}{" "}
+            {data.reviews.length === 1 ? "review" : "reviews"}
+          </p>
+        </div>
+      )}
+    </div>
+
+    {loading ? (
+      <p className="text-sm text-stone-500">Loading reviews...</p>
+    ) : error ? (
+      <p role="alert" className="text-sm text-red-700">
+        {error}
+      </p>
+    ) : data.reviews.length === 0 ? (
+      <div className="rounded-2xl border border-dashed border-stone-300 p-6 text-center">
+        <p className="font-medium text-stone-700">No reviews yet</p>
+        <p className="mt-1 text-sm text-stone-500">
+          Reviews will appear here when buyers share their experiences.
+        </p>
+      </div>
+    ) : (
+      
+<div className="space-y-3">
+  {data.reviews.map((review) => (
+    <article
+      key={review._id}
+      className="overflow-x-auto rounded-xl border border-stone-200 bg-white"
+    >
+<div className="flex min-w-max items-center gap-8 px-5 py-4 text-sm">
+        {/* Buyer */}
+        <div className="w-36 shrink-0">
+          <p className="truncate font-semibold text-stone-900">
+            {review.buyerName || "Buyer"}
+          </p>
+          <p className="text-xs text-stone-500">
+            {review.createdAt
+              ? new Date(review.createdAt).toLocaleDateString()
+              : ""}
+          </p>
+        </div>
+
+        {/* Overall rating */}
+        <div className="flex w-32 shrink-0 items-center gap-2 whitespace-nowrap">
+  <StarRating
+    value={review.overallRating}
+    size="text-base"
+  />
+  <span className="shrink-0 font-semibold text-stone-800">
+    {review.overallRating}/5
+  </span>
+</div>
+
+        {/* Quality */}
+        <p className="w-28 shrink-0">
+          Quality:{" "}
+          <strong className="text-stone-900">
+            {review.qualityRating}/5
+          </strong>
+        </p>
+
+        {/* Service */}
+        <p className="w-28 shrink-0">
+          Service:{" "}
+          <strong className="text-stone-900">
+            {review.serviceRating}/5
+          </strong>
+        </p>
+
+        {/* Comment */}
+        {review.comment && (
+          <p className="max-w-xs truncate text-stone-600" title={review.comment}>
+            {review.comment}
+          </p>
+        )}
+      </div>
+    </article>
+  ))}
+</div>
+
+
+    )}
+  </section>
+);
+}
+
 // ---------- Buyer ----------
 function BuyerDash() {
-  const { user, reqs, conns, produce } = useApp();
-  const mine = conns.filter((c) => c.buyerId === user._id);
-  const myReqs = reqs.filter((r) => r.buyerId === user._id);
+const {
+  user,
+  reqs = [],
+  conns = [],
+  produce = [],
+  users = [],
+} = useApp();  const mine = conns.filter((c) => c.buyerId === user._id);
+const navigate = useNavigate();  
+const myReqs = reqs.filter((r) => r.buyerId === user._id);
   const rec = produce.filter((p) => myReqs.some((r) => r.crop.toLowerCase() === p.crop.toLowerCase()));
   return (
-    <Page role="buyer">
-      <div><h1 className="font-serif text-3xl font-semibold text-green-900">Welcome, {user.name} 👋</h1><p className="text-stone-500 text-sm mt-1">Find fresh produce and connect with farmers directly.</p></div>
-      <div className="grid grid-cols-3 gap-3">
-        <Stat n={myReqs.filter((r) => r.status === "Open").length} label="Open Requirements" />
-        <Stat n={mine.length} label="Requests Sent" />
-        <Stat n={mine.filter((c) => c.status === "accepted").length} label="Connections" />
+
+<Page role="buyer">
+  <div className="space-y-7">
+
+    
+<h1 className="rounded-2xl bg-green-950 px-5 py-5 font-serif text-2xl font-semibold text-white shadow-sm sm:px-7 sm:py-6">
+  <span className="block text-xl tracking-wide sm:text-2xl">
+     Buyer Portal
+  </span>
+  <span className="mt-1 block font-sans text-xs font-medium tracking-[0.2em] text-green-300">
+    Find fresh produce and connect with farmers directly.
+  </span>
+</h1>
+
+
+     <div> <h1 className="font-serif text-3xl font-semibold text-green-900"> Welcome, {user.name} 👋 </h1> <p className="mt-1 text-sm text-stone-500">  </p> </div>
+
+    {/* Statistics */}
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      
+        <Stat
+          n={myReqs.filter((r) => r.status === "Open").length}
+          label="Open Requirements"
+        />
+       
+
+      <Stat
+        n={mine.length}
+        label="Requests Sent"
+      />
+
+      <Stat
+        n={mine.filter((c) => c.status === "accepted").length}
+        label="Connections"
+      />
+    </div>
+
+    {/* Notifications */}
+    <DashboardNotifications
+      role="buyer"
+      conns={conns}
+      produce={produce}
+      users={users}
+    />
+
+    {/* Recommended produce */}
+    <section className="space-y-4">
+      <div>
+        <h2 className="font-serif text-3xl font-semibold text-green-900">
+          Recommended Produce
+        </h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Discover produce listed by farmers.
+        </p>
       </div>
-      <h2 className="font-semibold text-lg text-green-900">Recommended Produce</h2>
-      <div className="grid md:grid-cols-3 gap-3">
-        {rec.map((p) => <ProduceCard key={p._id} p={p} />)}
-        {rec.length === 0 && <p className="text-stone-500 text-sm">Post a requirement to get recommendations.</p>}
-      </div>
-    </Page>
+
+      {rec.length > 0 ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {rec.map((p) => (
+            <ProduceCard key={p._id} p={p} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/70 px-5 py-8 text-center sm:px-8">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
+            🌱
+          </div>
+
+          <h3 className="font-serif text-lg font-semibold text-green-950">
+            Find the produce you need
+          </h3>
+
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+            Post your crop requirements to help connect with farmers offering
+            the produce you are looking for.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => navigate("/buyer/requirements")}
+            className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-offset-2"
+          >
+            + Post a Requirement
+          </button>
+        </div>
+      )}
+
+<section className="space-y-5">
+  <div className="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+        Explore the marketplace
+      </p>
+      <h2 className="mt-1 font-serif text-2xl font-semibold text-green-950 sm:text-3xl">
+        All Available Produce
+      </h2>
+      <p className="mt-2 text-sm text-stone-600">
+        Discover crops listed by farmers and connect directly with them.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => navigate("/buyer/search")}
+      className="rounded-xl border border-green-800 px-4 py-2.5 text-sm font-semibold text-green-800 transition hover:bg-green-50"
+    >
+      Browse Marketplace →
+    </button>
+  </div>
+
+  {produce.filter(
+  (p) => String(p.status || "").toLowerCase() === "available"
+).length === 0 ? (
+    <div className="rounded-2xl border border-dashed border-green-300 bg-white px-5 py-10 text-center">
+      <div className="text-4xl">🌱</div>
+      <h3 className="mt-3 font-serif text-xl font-semibold text-green-950">
+        No produce available right now
+      </h3>
+      <p className="mt-2 text-sm text-stone-600">
+        New listings from farmers will appear here when available.
+      </p>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      {produce
+        .filter((p) => p.status === "available")
+        .map((p) => {
+          const farmer = users.find(
+            (u) => u._id === p.farmerId
+          );
+
+          return (
+            <article
+              key={p._id}
+              className="group overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-green-200 hover:shadow-lg"
+            >
+              <div className="relative h-48 overflow-hidden bg-green-50">
+                {p.images?.[0] ? (
+                  <img
+                    src={p.images[0]}
+                    alt={p.crop}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-5xl">
+                    🌾
+                  </div>
+                )}
+
+                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-green-800 shadow-sm">
+                  Available
+                </span>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <div>
+                  <h3 className="font-serif text-xl font-semibold text-green-950">
+                    {p.crop}
+                  </h3>
+                  <p className="mt-1 text-sm text-stone-500">
+                    {p.district || "Location not specified"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-green-50 p-3">
+                    <p className="text-xs text-stone-500">Quantity</p>
+                    <p className="mt-1 font-semibold text-green-950">
+                      {p.quantity} {p.unit}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-amber-50 p-3">
+                    <p className="text-xs text-stone-500">Quality</p>
+                    <p className="mt-1 font-semibold text-stone-800">
+                      {p.quality || "Not specified"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 border-t border-stone-100 pt-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 font-semibold text-green-800">
+                    {farmer?.name?.charAt(0)?.toUpperCase() || "F"}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-stone-500">Listed by</p>
+                    <p className="truncate text-sm font-semibold text-stone-800">
+                      {farmer?.name || "Farmer"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/buyer/produce/${p._id}`)
+                    }
+                    className="shrink-0 rounded-xl bg-green-800 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-green-950"
+                  >
+                    View Details
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+    </div>
+  )}
+</section>
+    </section>
+
+  </div>
+</Page>
+
+
   );
 }
 
+
 function ProduceCard({ p }) {
   const { users } = useApp();
-  
+
   return (
     <div className={`${cardBase} overflow-hidden hover:shadow-lg hover:-translate-y-0.5 hover:border-green-200 transition-all duration-200`}>
-      <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-amber-50 h-28 grid place-items-center text-5xl border-b border-green-100">{emoji(p.crop)}</div>
+      
+      {/* Show uploaded photos, or the default crop emoji */}
+      {p.images?.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 border-b border-green-100 p-2">
+          {p.images.map((url, index) => (
+            <img
+              key={`${p._id}-${index}`}
+              src={url}
+              alt={`${p.crop} photo ${index + 1}`}
+              loading="lazy"
+              className="h-36 w-full rounded-xl object-cover"
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-amber-50 h-28 grid place-items-center text-5xl border-b border-green-100">
+          {emoji(p.crop)}
+        </div>
+      )}
+
       <div className="p-4 space-y-1">
-        <div className="flex items-center justify-between"><h3 className="font-semibold text-green-900 text-lg">{p.crop}</h3><span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{p.quality}</span></div>
-        <p className="text-sm font-medium">{p.quantity} {p.unit}</p>
-        <p className="text-sm text-stone-500 flex items-center gap-1"><MapPin size={14} />{p.district}, {p.state}</p>
-        <p className="text-sm text-stone-500 flex items-center gap-1"><CalendarDays size={14} />Available from {p.date}</p>
-        <p className="text-sm text-stone-500">Farmer: {users.find((u) => u._id === p.farmerId)?.name}</p>
-        <Link to={`/buyer/produce/${p._id}`} className={`${btn} w-full mt-3`}>View Details</Link>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-green-900 text-lg">
+            {p.crop}
+          </h3>
+          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+            {p.quality}
+          </span>
+        </div>
+
+        <p className="text-sm font-medium">
+          {p.quantity} {p.unit}
+        </p>
+
+        <p className="text-sm text-stone-500 flex items-center gap-1">
+          <MapPin size={14} />
+          {p.district}, {p.state}
+        </p>
+
+        <p className="text-sm text-stone-500 flex items-center gap-1">
+          <CalendarDays size={14} />
+          Available from {p.date}
+        </p>
+
+        <p className="text-sm text-stone-500">
+          Farmer: {users.find((u) => u._id === p.farmerId)?.name}
+        </p>
+
+        <Link
+          to={`/buyer/produce/${p._id}`}
+          className={`${btn} w-full mt-3`}
+        >
+          View Details
+        </Link>
       </div>
     </div>
   );
 }
+
+
 
 function BuyerSearch() {
   const { produce } = useApp();
@@ -1300,22 +2629,51 @@ function BuyerSearch() {
         <select className={inp} value={f.quality} onChange={(e) => setF({ ...f, quality: e.target.value })}><option value="">Any quality</option><option>Grade A</option><option>Grade B</option><option>Grade C</option></select>
       </div>
       <p className="text-sm text-stone-500">{rows.length} result(s)</p>
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">{rows.map((p) => <ProduceCard key={p._id} p={p} />)}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">{rows.map((p) => <ProduceCard key={p._id} p={p} />)}</div>
     </Page>
   );
 }
 
 
+
 function ProduceDetails() {
   const { id } = useParams();
-  const { user, users, produce, conns, setConns } = useApp();
+  const { user, users, produce, conns, setConns, produceLoading } = useApp();
+
+  const nav = useNavigate();
 
   const p = produce.find((x) => x._id === id);
+
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState("");
+
+  if (produceLoading && !p) {
+    return (
+      <Page role="buyer">
+        <p className="text-stone-500">Loading produce details...</p>
+      </Page>
+    );
+  }
 
   if (!p) {
     return (
       <Page role="buyer">
-        <p>Produce not found.</p>
+        <div className={`${card} max-w-2xl text-center space-y-3`}>
+          <div className="text-5xl">🌱</div>
+          <h1 className="font-serif text-2xl font-semibold text-green-900">
+            Produce not found
+          </h1>
+          <p className="text-sm text-stone-500">
+            This listing may have been removed or is no longer available.
+          </p>
+          <button
+            className={btn}
+            onClick={() => nav("/buyer/search")}
+          >
+            Back to Search
+          </button>
+        </div>
       </Page>
     );
   }
@@ -1326,179 +2684,806 @@ function ProduceDetails() {
     (c) => c.buyerId === user?._id && c.produceId === p._id
   );
 
-  const others = produce
-    .filter((x) => x.farmerId === p.farmerId)
-    .map((x) => x.crop)
-    .join(", ");
-  
-const sendRequest = async () => {
-  try {
-    const response = await api.post("/connections", {
-      farmerId: p.farmerId,
-      produceId: p._id,
-    });
+  const images = p.images?.length ? p.images : [];
+  const otherCrops = produce
+    .filter((item) => item.farmerId === p.farmerId && item._id !== p._id)
+    .map((item) => item.crop);
 
-    const c = response.data.connection;
+  const sendRequest = async () => {
+    if (sending || conn) return;
 
-    setConns((previous) => {
-      const next = [
+    setSending(true);
+    setErr("");
+
+    try {
+      const response = await api.post("/connections", {
+        farmerId: p.farmerId,
+        produceId: p._id,
+      });
+
+      const c = response.data.connection;
+
+      setConns((previous) => [
         ...previous.filter(
           (item) =>
-            !(
-              item.buyerId === user._id &&
-              item.produceId === p._id
-            )
+            !(item.buyerId === user._id && item.produceId === p._id)
         ),
         {
-          _id: c._id,
+          _id: c.id || c._id,
           buyerId: user._id,
           farmerId: p.farmerId,
           produceId: p._id,
-          status: c.status,
+          status: c.status || "pending",
         },
-      ];
-
-      return next;
-    });
-  } catch (error) {
-    alert(
-      error.response?.data?.message ||
-        "Unable to send connection request."
-    );
-  }
-};
+      ]);
+    } catch (error) {
+      setErr(
+        error.response?.data?.message ||
+          "Unable to send connection request. Please try again."
+      );
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <Page role="buyer">
-      <div className={`${card} max-w-xl space-y-1`}>
-        <h1 className="font-serif text-3xl font-semibold text-green-900">
-          {emoji(p.crop)} {p.crop}
-        </h1>
+      <div className="space-y-6">
 
-        <p>
-          {p.quantity} {p.unit} · {p.quality} · Available {p.date}
-        </p>
-
-        <p className="text-stone-600">
-          {p.district}, {p.state}
-        </p>
-
-        <p>{p.description}</p>
-
-        <hr className="my-2" />
-
-        {farmer ? (
-          <>
-            <p>
-              Farmer: <b>{farmer.name}</b> ({farmer.district})
-            </p>
-            <p className="text-sm text-stone-500">
-              Listed crops: {others || "No other listings"}
-            </p>
-          </>
-        ) : (
-          <>
-            <p>Farmer: Information unavailable</p>
-            <p className="text-sm text-stone-500">
-              The farmer's profile could not be loaded.
-            </p>
-          </>
-        )}
-
-        {!conn && (
-          
+        {/* Navigation */}
+        
 <button
-  className={`${btn} mt-3`}
-  onClick={sendRequest}
+  type="button"
+  onClick={() => nav("/buyer/search")}
+  className="inline-flex items-center gap-2 rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 shadow-sm transition hover:bg-green-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
 >
-  Send Connection Request
+  <span aria-hidden="true">←</span>
+  Back to Search
 </button>
 
 
-        )}
 
-        {conn && (
-          <button className={`${btn} mt-3 opacity-60`} disabled>
-            {conn.status === "pending"
-              ? "Request Sent"
-              : `Request ${conn.status}`}
-          </button>
-        )}
+        {/* Main product section */}
+        <div className="grid lg:grid-cols-2 gap-6 items-start">
 
-        {conn?.status === "accepted" && farmer ? (
-          <p className="mt-2 text-green-800">
-            Phone: {farmer.phone} · Email: {farmer.email}
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-stone-500">
-            Contact details will be available after the farmer accepts your
-            request.
-          </p>
-        )}
+          {/* Photo gallery */}
+          <section className={`${cardBase} overflow-hidden`}>
+            <div className="relative bg-gradient-to-br from-green-50 via-emerald-50 to-amber-50">
+              {images.length > 0 ? (
+                <img
+                  src={images[selectedImage] || images[0]}
+                  alt={`${p.crop} photo`}
+                  className="w-full h-72 sm:h-96 object-contain"
+                />
+              ) : (
+                <div className="h-72 sm:h-96 grid place-items-center">
+                  <span className="text-8xl">{emoji(p.crop)}</span>
+                </div>
+              )}
+
+              <span className="absolute top-4 left-4">
+                <Badge s={p.status || "Available"} />
+              </span>
+            </div>
+
+            {images.length > 1 && (
+              <div className="p-3 grid grid-cols-5 gap-2">
+                {images.map((url, index) => (
+                  <button
+                    key={`${p._id}-detail-${index}`}
+                    type="button"
+                    onClick={() => setSelectedImage(index)}
+                    className={`overflow-hidden rounded-xl border-2 ${
+                      selectedImage === index
+                        ? "border-green-700"
+                        : "border-transparent"
+                    }`}
+                  >
+                    <img
+                      src={url}
+                      alt={`${p.crop} thumbnail ${index + 1}`}
+                      className="h-16 w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Product information */}
+          <section className={`${card} space-y-5`}>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-semibold">
+                  Agricultural Produce
+                </span>
+                <span className="rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-semibold">
+                  {p.quality || "Quality not specified"}
+                </span>
+              </div>
+
+              <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-green-950">
+                {emoji(p.crop)} {p.crop}
+              </h1>
+
+              <p className="text-stone-500 mt-2 text-sm">
+                Fresh produce directly from the farmer
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-green-50 border border-green-100 p-5">
+              <p className="text-xs uppercase tracking-wide text-green-700 font-semibold">
+                Available Quantity
+              </p>
+              <p className="text-3xl font-bold text-green-950 mt-1">
+                {p.quantity}{" "}
+                <span className="text-lg font-medium">{p.unit}</span>
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500">Location</p>
+                <p className="font-medium text-stone-800 mt-1">
+                  {p.district}, {p.state}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500">Available From</p>
+                <p className="font-medium text-stone-800 mt-1">
+                  {p.date
+                    ? new Date(`${p.date}T00:00:00`).toLocaleDateString(
+                        "en-IN",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        }
+                      )
+                    : "Date not specified"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500">Quality Grade</p>
+                <p className="font-medium text-stone-800 mt-1">
+                  {p.quality || "Not specified"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-stone-200 p-4">
+                <p className="text-xs text-stone-500">Listing Status</p>
+                <p className="font-medium text-stone-800 mt-1">
+                  {p.status || "Available"}
+                </p>
+              </div>
+            </div>
+
+            {p.description?.trim() && (
+              <div>
+                <h2 className="font-semibold text-green-950">
+                  About this Produce
+                </h2>
+                <p className="text-sm text-stone-600 leading-relaxed mt-2 whitespace-pre-wrap">
+                  {p.description}
+                </p>
+              </div>
+            )}
+
+            <div className="border-t border-stone-200 pt-5">
+              <h2 className="font-semibold text-green-950 mb-3">
+                Interested in this produce?
+              </h2>
+
+              {!conn ? (
+                <button
+                  type="button"
+                  className={`${btn} w-full py-3`}
+                  onClick={sendRequest}
+                  disabled={sending}
+                >
+                  {sending ? "Sending Request..." : "Send Connection Request"}
+                </button>
+              ) : (
+                <div className="rounded-xl bg-green-50 border border-green-100 p-4">
+                  <p className="font-semibold text-green-900">
+                    {conn.status === "accepted"
+                      ? "Connection Accepted"
+                      : conn.status === "rejected"
+                      ? "Request Rejected"
+                      : "Connection Request Sent"}
+                  </p>
+                  <p className="text-sm text-stone-600 mt-1">
+                    {conn.status === "accepted"
+                      ? "You can now view the farmer's contact information below."
+                      : conn.status === "rejected"
+                      ? "This request was rejected. Contact details remain hidden."
+                      : "Wait for the farmer to respond to your request."}
+                  </p>
+                </div>
+              )}
+
+              {err && (
+                <p className="text-sm text-red-600 mt-3">{err}</p>
+              )}
+
+              <p className="text-xs text-stone-500 mt-3">
+                AgriSetu connects buyers and farmers directly. Price and
+                transaction arrangements can be discussed between both parties.
+              </p>
+            </div>
+          </section>
+        </div>
+
+        {/* Farmer information */}
+        <section className={`${card} space-y-4`}>
+          
+
+<div className="border-b border-green-200 pb-4">
+  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+    Seller Information
+  </p>
+
+  <h2 className="mt-1 font-serif text-2xl font-semibold text-green-950 sm:text-3xl">
+    Meet the Farmer
+  </h2>
+
+  <div className="mt-3 h-1 w-14 rounded-full bg-green-700" />
+</div>
+
+
+
+          {farmer ? (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-green-100 text-green-900 grid place-items-center text-xl font-bold">
+                  {(farmer.name || "F")[0].toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-green-950">
+                    {farmer.name}
+                  </h3>
+                  <p className="text-sm text-stone-500">
+                    Farmer · {farmer.district || p.district}
+                    {farmer.state ? `, ${farmer.state}` : ""}
+                  </p>
+                </div>
+              </div>
+
+              {conn?.status === "accepted" ? (
+                <div className="rounded-xl bg-green-50 border border-green-100 p-4 space-y-2">
+                  <h3 className="font-semibold text-green-900">
+                    Contact Details
+                  </h3>
+                  <p className="text-sm text-stone-700">
+                    Phone: {farmer.phone || "Not provided"}
+                  </p>
+                  <p className="text-sm text-stone-700">
+                    Email: {farmer.email || "Not provided"}
+                  </p>
+                </div>
+                
+              ) : (
+                <p className="text-sm text-stone-500">
+                  Farmer contact details become available after your connection
+                  request is accepted.
+                </p>
+              )}
+
+              {otherCrops.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-green-950 mb-2">
+                    Other Produce from this Farmer
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {otherCrops.map((crop, index) => (
+                      <span
+                        key={`${crop}-${index}`}
+                        className="rounded-full bg-stone-100 border border-stone-200 px-3 py-1.5 text-sm text-stone-700"
+                      >
+                        {emoji(crop)} {crop}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-stone-500">
+              Farmer profile information is currently unavailable.
+            </p>
+          )}
+          
+<ProduceReviews farmerId={farmer._id} />
+        </section>
       </div>
     </Page>
   );
 }
+
+
 
 
 
 function BuyerReqs() {
   const { user, reqs, setReqs } = useApp();
   const [f, setF] = useState({ crop: "", quantity: "", date: "" });
+  
+const set = (key) => (e) => {
+  setF((previous) => ({
+    ...previous,
+    [key]: e.target.value,
+  }));
+};
   const add = () => {
     if (!f.crop || !(Number(f.quantity) > 0) || !f.date) return;
     setReqs([...reqs, { _id: uid(), buyerId: user._id, crop: f.crop, quantity: Number(f.quantity), date: f.date, status: "Open" }]);
     setF({ crop: "", quantity: "", date: "" });
   };
   return (
-    <Page role="buyer">
-      <h1 className="font-serif text-3xl font-semibold text-green-900">My Requirements</h1>
-      <div className={`${card} grid md:grid-cols-4 gap-2`}>
-        <input className={inp} placeholder="Crop" value={f.crop} onChange={(e) => setF({ ...f, crop: e.target.value })} />
-        <input className={inp} type="number" placeholder="Quantity (kg)" value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} />
-        <input className={inp} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
-        <button className={btn} onClick={add}>+ Post Requirement</button>
+    
+<Page role="buyer">
+  <div className="space-y-7">
+
+    {/* Page Header */}
+      
+    <div className="border-b border-green-200 pb-5">
+      <h1 className="font-serif text-4xl font-semibold text-green-900">
+       My Requirements
+      </h1>
+      
+    </div>
+     
+
+    {/* Requirement Form */}
+    <section className={`${card} overflow-hidden`}>
+      <div className="border-b border-green-100 bg-green-50/70 px-5 py-5 sm:px-6">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-800 text-xl text-white shadow-sm">
+            +
+          </div>
+
+          <div>
+            <h2 className="font-serif text-xl font-semibold text-green-950">
+              Post a New Requirement
+            </h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Add your crop details so matching farmers can plan their supply.
+            </p>
+          </div>
+        </div>
       </div>
-      <Table heads={["Crop", "Quantity", "Required by", "Status", ""]}
-        rows={reqs.filter((r) => r.buyerId === user._id).map((r) => [r.crop, `${r.quantity} kg`, r.date, <Badge s={r.status} />,
-          <button className="text-red-600" onClick={() => setReqs(reqs.filter((x) => x._id !== r._id))}>Delete</button>])} />
-    </Page>
+
+      <div className="grid grid-cols-1 items-start gap-5 p-5 sm:p-6 md:grid-cols-2 xl:grid-cols-4">
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-stone-800">
+            Crop Name
+          </label>
+          <input
+            className={`${inp} h-12 w-full rounded-xl`}
+            placeholder="e.g. Tomato"
+            value={f.crop}
+            onChange={(e) =>
+              setF({ ...f, crop: e.target.value })
+            }
+          />
+          <p className="text-xs text-stone-500">
+            Enter the produce you want to buy.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-stone-800">
+            Quantity Required
+          </label>
+          <div className="relative">
+            <input
+              className={`${inp} h-12 w-full rounded-xl pr-14`}
+              type="number"
+              min="1"
+              placeholder="e.g. 400"
+              value={f.quantity}
+              onChange={(e) =>
+                setF({ ...f, quantity: e.target.value })
+              }
+            />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-stone-500">
+              kg
+            </span>
+          </div>
+          <p className="text-xs text-stone-500">
+            Specify the quantity in kilograms.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-stone-800">
+            Required By
+          </label>
+          <input
+            className={`${inp} h-12 w-full rounded-xl`}
+            type="date"
+            min={new Date().toISOString().split("T")[0]}
+            value={f.date}
+            onChange={(e) =>
+              setF({ ...f, date: e.target.value })
+            }
+            required
+          />
+          <p className="text-xs text-stone-500">
+            Select your expected delivery date.
+          </p>
+        </div>
+
+        <div className="flex flex-col justify-end gap-2">
+          <button
+            type="button"
+            className={`${btn} flex h-12 w-full items-center justify-center gap-2 rounded-xl shadow-sm transition hover:-translate-y-0.5 hover:shadow-md`}
+            onClick={add}
+          >
+            <span className="text-lg">+</span>
+            Post Requirement
+          </button>
+          <p className="text-center text-xs text-stone-500">
+            Share your needs with farmers.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    {/* Requirements List */}
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+            Your activity
+          </p>
+          <h2 className="mt-1 font-serif text-2xl font-semibold text-green-950">
+            Posted Requirements
+          </h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Manage the produce you are looking to purchase.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-green-100 bg-green-50 px-4 py-3">
+          <p className="text-xs font-medium text-green-800">
+            Total posted
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-green-950">
+            {reqs.filter((r) => r.buyerId === user._id).length}
+          </p>
+        </div>
+      </div>
+
+      {reqs.filter((r) => r.buyerId === user._id).length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-green-300 bg-white px-5 py-10 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-3xl">
+            🌱
+          </div>
+          <h3 className="mt-4 font-serif text-xl font-semibold text-green-950">
+            No requirements posted yet
+          </h3>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+            Add your first requirement above to tell farmers which crops and
+            quantities you are looking for.
+          </p>
+        </div>
+      ) : (
+        <div className={`${card} overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <Table
+              heads={[
+                "Crop",
+                "Quantity",
+                "Required By",
+                "Status",
+                "Action",
+              ]}
+              rows={reqs
+                .filter((r) => r.buyerId === user._id)
+                .map((r) => [
+                  <span className="font-semibold text-green-950">
+                    {r.crop}
+                  </span>,
+                  <span className="font-medium text-stone-700">
+                    {r.quantity} kg
+                  </span>,
+                  r.date,
+                  <Badge s={r.status} />,
+                  <button
+                    type="button"
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-800"
+                    onClick={() =>
+                      setReqs(reqs.filter((x) => x._id !== r._id))
+                    }
+                  >
+                    Delete
+                  </button>,
+                ])}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  </div>
+</Page>
+
+
+
   );
 }
 
 
 function BuyerConns() {
-  const { user, users, produce, conns } = useApp();
+const { user, users, produce, conns } = useApp();
+const [reviewedIds, setReviewedIds] = useState(new Set());
+const [reviewLoading, setReviewLoading] = useState(true);
+const [reviewError, setReviewError] = useState("");
+const [reviewingConnectionId, setReviewingConnectionId] = useState(null);
 
-  const rows = conns
-    .filter((c) => c.buyerId === user?._id)
-    .map((c) => {
-      const p = produce.find((x) => x._id === c.produceId);
-      const fm = users.find((u) => u._id === p?.farmerId);
+useEffect(() => {
+let cancelled = false;
 
-      return [
-        p?.crop || "Produce unavailable",
-        fm?.name || "Farmer information unavailable",
-        <Badge s={c.status} />,
-        c.status === "accepted"
-          ? `${fm?.phone || "No phone"} · ${fm?.email || "No email"}`
-          : "Hidden until accepted",
-      ];
-    });
 
-  return (
-    <Page role="buyer">
-      <h1 className="font-serif text-3xl font-semibold text-green-900">
+const loadMyReviews = async () => {
+  try {
+    const response = await api.get("/reviews/mine");
+    const ids = new Set(
+      (response.data.reviews || []).map((review) =>
+        String(review.connectionId)
+      )
+    );
+
+    if (!cancelled) setReviewedIds(ids);
+  } catch {
+    if (!cancelled) {
+      setReviewError("Unable to check your review history.");
+    }
+  } finally {
+    if (!cancelled) setReviewLoading(false);
+  }
+};
+
+loadMyReviews();
+
+return () => {
+  cancelled = true;
+};
+
+
+}, []);
+
+const handleReviewSubmitted = (connectionId) => {
+  setReviewedIds((previous) => {
+    const updated = new Set(previous);
+    updated.add(String(connectionId));
+    return updated;
+  });
+
+  setReviewingConnectionId(null);
+};
+
+const mine = conns.filter(
+(connection) => connection.buyerId === user?._id
+);
+
+return ( 
+<Page role="buyer">
+  <div className="space-y-6">
+
+    {/* Page heading */}
+    <div className="border-b border-green-200 pb-5">
+      <h1 className="font-serif text-4xl font-semibold text-green-900">
         My Connections
       </h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+        Track your farmer connections and share your experience after a
+        connection is accepted.
+      </p>
+    </div>
 
-      <Table
-        heads={["Crop", "Farmer", "Status", "Contact"]}
-        rows={rows}
-      />
-    </Page>
-  );
+    {/* Error message */}
+    {reviewError && (
+      <div
+        role="alert"
+        className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+      >
+        {reviewError}
+      </div>
+    )}
+
+    {/* Empty state */}
+    {mine.length === 0 ? (
+      <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/60 px-5 py-10 text-center sm:px-8">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
+          🌱
+        </div>
+        <h2 className="mt-4 font-serif text-xl font-semibold text-green-950">
+          No connections yet
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+          Explore available produce and connect directly with farmers to get
+          started.
+        </p>
+        <Link
+          to="/buyer/search"
+          className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900"
+        >
+          Find Produce →
+        </Link>
+      </div>
+    ) : (
+      <div className="grid grid-cols-1 gap-5">
+        {mine.map((connection) => {
+          const product = produce.find(
+            (item) => item._id === connection.produceId
+          );
+
+          const farmer = users.find(
+            (item) =>
+              item._id === (product?.farmerId || connection.farmerId)
+          );
+
+          const reviewed = reviewedIds.has(String(connection._id));
+
+          return (
+            <article
+              key={connection._id}
+              className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm transition hover:border-green-200 hover:shadow-md"
+            >
+              {/* Connection header */}
+              <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+                <div className="flex min-w-0 items-start gap-4">
+                  
+<div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl border border-green-100 bg-green-50 shadow-sm">
+  {product?.images?.[0] ? (
+    <img
+      src={product.images[0]}
+      alt={product.crop || "Produce"}
+      className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+      loading="lazy"
+    />
+  ) : (
+    <div className="flex h-full items-center justify-center text-xs text-green-700">
+      No image
+    </div>
+  )}
+</div>
+
+
+
+                  <div className="min-w-0">
+                    <h2 className="font-serif text-xl font-semibold text-green-950">
+                      {product?.crop || "Produce unavailable"}
+                    </h2>
+                    <p className="mt-1 text-sm text-stone-600">
+                      Farmer:{" "}
+                      <span className="font-medium text-stone-800">
+                        {farmer?.name || "Farmer information unavailable"}
+                      </span>
+                    </p>
+
+                    {product && (
+                      <p className="mt-2 text-sm text-stone-500">
+                        {product.quantity} {product.unit}
+                        <span className="mx-2 text-stone-300">•</span>
+                        {product.district || "Location unavailable"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <Badge s={connection.status} />
+              </div>
+
+              {/* Contact details */}
+              <div className="border-t border-stone-100 px-5 py-4 sm:px-6">
+                {connection.status === "accepted" ? (
+                  <div className="rounded-xl border border-green-100 bg-green-50/70 p-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-green-800">
+                      Connection accepted · Farmer contact
+                    </p>
+
+                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      <p className="break-words text-stone-700">
+                        <span className="font-medium text-stone-900">
+                          Phone
+                        </span>
+                        <span className="mx-2 text-stone-300">·</span>
+                        {farmer?.phone || "Not provided"}
+                      </p>
+
+                      <p className="break-words text-stone-700">
+                        <span className="font-medium text-stone-900">
+                          Email
+                        </span>
+                        <span className="mx-2 text-stone-300">·</span>
+                        {farmer?.email || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="rounded-xl bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-600">
+                    Farmer contact details will be available when the
+                    connection is accepted.
+                  </p>
+                )}
+              </div>
+
+              {/* Review section */}
+              {connection.status === "accepted" && (
+                <div className="border-t border-stone-100 px-5 py-5 sm:px-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-green-950">
+                        Your experience
+                      </h3>
+                      <p className="mt-1 text-sm text-stone-500">
+                        Share feedback about the farmer and produce.
+                      </p>
+                    </div>
+
+                    {reviewLoading ? (
+                      <span className="text-sm text-stone-500">
+                        Checking review status...
+                      </span>
+                    ) : reviewed ? (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-2 text-sm font-medium text-green-800">
+                        <span aria-hidden="true">✓</span>
+                        Review submitted
+                      </span>
+                    ) : reviewError ? (
+                      <p role="alert" className="text-sm text-stone-600">
+                        Refresh the page to check your review status.
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReviewingConnectionId((current) =>
+                            current === String(connection._id)
+                              ? null
+                              : String(connection._id)
+                          )
+                        }
+                        className="inline-flex items-center justify-center rounded-xl border border-green-800 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
+                      >
+                        {reviewingConnectionId === String(connection._id)
+                          ? "Cancel Review"
+                          : "Write a Review"}
+                      </button>
+                    )}
+                  </div>
+
+                  {!reviewLoading &&
+                    !reviewed &&
+                    !reviewError &&
+                    reviewingConnectionId === String(connection._id) && (
+                      <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50/70 p-4 sm:p-5">
+                        <ConnectionReviewForm
+                          connection={connection}
+                          onSubmitted={handleReviewSubmitted}
+                        />
+                      </div>
+                    )}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    )}
+  </div>
+</Page>
+
+
+
+);
 }
+
 
 
 

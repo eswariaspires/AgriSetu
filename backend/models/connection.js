@@ -26,10 +26,7 @@ const connectionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-connectionSchema.index(
-  { buyerId: 1, produceId: 1 },
-  { unique: true }
-);
+
 
 export default mongoose.model("Connection", connectionSchema);
 

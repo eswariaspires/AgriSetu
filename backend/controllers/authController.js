@@ -11,7 +11,7 @@ export const register = async (req, res) => {
   password,
   role,
   phone,
-  district,
+  Location,
   state,
 } = req.body;
 
@@ -50,7 +50,7 @@ export const register = async (req, res) => {
   password: hashedPassword,
   role,
   phone,
-  district,
+  Location,
   state,
 });
 
@@ -62,7 +62,7 @@ export const register = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-  district: user.district,
+  Location: user.Location,
   state: user.state,
       },
     });
@@ -115,7 +115,7 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-  district: user.district,
+  Location: user.Location,
   state: user.state,
       },
     });

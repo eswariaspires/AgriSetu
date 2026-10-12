@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect } from "react";
-
+import { createContext, useContext, useState, useRef, useEffect } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import {
 BrowserRouter,
 Routes,
@@ -8,7 +8,7 @@ Link,
 useNavigate,
 useParams,
 useSearchParams,
-useLocation,
+useLocation ,
 Navigate,
 } from "react-router-dom";
 
@@ -83,7 +83,7 @@ const Badge = ({ s }) => {
 function Page({ role, children }) {
   const { user, setUser } = useApp();
   const nav = useNavigate();
-  const loc = useLocation();
+const loc = useLocation();
   if (!user || user.role !== role) return <Navigate to="/login" />;
   return (
     <div className="min-h-screen bg-cream text-stone-800 md:flex">
@@ -413,7 +413,7 @@ function Landing() {
               {
                 icon: Package,
                 title: "List Produce",
-                text: "Farmers can add their available crops with quantity, quality and location."
+                text: "Farmers can add their available crops with quantity, quality and district."
               },
               {
                 icon: Search,
@@ -489,7 +489,7 @@ function Landing() {
 function Login() {
   const { setUser } = useApp();
   const nav = useNavigate();
-
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -615,19 +615,30 @@ localStorage.setItem("agrisetu_user", JSON.stringify(loggedInUser));    setUser(
             </div>
 
             {/* PASSWORD */}
-            <div>
-              <label className="text-sm font-medium text-stone-700">
-                Password
-              </label>
+            
+<div className="relative">
+  <input
+    type={showPassword ? "text" : "password"}
+value={password}
+onChange={(e) => setPassword(e.target.value)}
+    placeholder="Enter password"
+    className="w-full rounded-lg border px-4 py-3 pr-12"
+  />
 
-              <input
-                className={`${inp} mt-1`}
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+  <button
+    type="button"
+    onClick={() => setShowPassword((previous) => !previous)}
+    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+    aria-label={showPassword ? "Hide password" : "Show password"}
+    title={showPassword ? "Hide password" : "Show password"}
+  >
+    {showPassword ? (
+      <EyeOff size={20} />
+    ) : (
+      <Eye size={20} />
+    )}
+  </button>
+</div>
 
             {/* ERROR */}
             {err && (
@@ -666,7 +677,7 @@ localStorage.setItem("agrisetu_user", JSON.stringify(loggedInUser));    setUser(
 function Register() {
   const { setUser } = useApp();
   const nav = useNavigate();
-
+  const [showPassword, setShowPassword] = useState(false);
   const [f, setF] = useState({
     name: "",
     email: "",
@@ -700,7 +711,7 @@ function Register() {
   }
 
   if (!f.district || !f.state) {
-    return setErr("District and state are required.");
+    return setErr("district and state are required.");
   }
 
   try {
@@ -930,23 +941,23 @@ function Register() {
               </div>
             </div>
 
-            {/* LOCATION */}
+            {/* district */}
             <div className="border-t border-stone-200 pt-5">
 
               <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-3">
-                Location
+                district
               </p>
 
               <div className="grid sm:grid-cols-2 gap-3">
 
                 <div>
                   <label className="text-sm font-medium text-stone-700">
-                    District
+                    district
                   </label>
 
                   <input
                     className={`${inp} mt-1`}
-                    placeholder="e.g. Guntur"
+                    placeholder="e.g. Chintalapudi, Chintalapudi Mandal, Eluru District"
                     value={f.district}
                     onChange={set("district")}
                   />
@@ -977,19 +988,33 @@ function Register() {
 
               <div className="grid sm:grid-cols-2 gap-3">
 
-                <div>
-                  <label className="text-sm font-medium text-stone-700">
-                    Password
-                  </label>
+                
 
-                  <input
-                    className={`${inp} mt-1`}
-                    type="password"
-                    placeholder="Minimum 6 characters"
-                    value={f.password}
-                    onChange={set("password")}
-                  />
-                </div>
+<div className="relative">
+  <label className="text-sm font-medium text-stone-700">
+    Password
+  </label>
+
+  <input
+    className={`${inp} mt-1 pr-12`}
+    type={showPassword ? "text" : "password"}
+    name="password"
+    value={f.password}
+    onChange={set("password")}
+    placeholder="Enter password"
+  />
+
+  <button
+    type="button"
+    onClick={() => setShowPassword((previous) => !previous)}
+    className="absolute right-3 top-[38px] text-gray-500"
+    aria-label={showPassword ? "Hide password" : "Show password"}
+    title={showPassword ? "Hide password" : "Show password"}
+  >
+    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+  </button>
+</div>
+
 
                 <div>
                   <label className="text-sm font-medium text-stone-700">
@@ -1044,177 +1069,223 @@ function Register() {
 
 // ---------- Farmer ----------
 
-function DashboardNotifications({ role, conns, produce, users }) {
+function DashboardNotifications() {
   const { user } = useApp();
 
-  const storageKey = `agrisetu_notifications_read_${user?._id}`;
-
-  const [readIds, setReadIds] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(storageKey) || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(readIds));
-  }, [readIds, storageKey]);
+    let cancelled = false;
 
-  const notifications = conns
-    .filter((c) =>
-      role === "farmer"
-        ? produce.some(
-            (p) =>
-              p._id === c.produceId &&
-              p.farmerId === user?._id
-          )
-        : c.buyerId === user?._id
-    )
-    .map((c) => {
-      const item = produce.find(
-        (p) => p._id === c.produceId
-      );
-
-      const otherUserId =
-        role === "farmer" ? c.buyerId : item?.farmerId;
-
-      const otherUser = (users || []).find(
-  (u) => u._id === otherUserId
-);
-
-      const crop = item?.crop || "produce";
-
-      let message = "";
-
-      if (c.status === "accepted") {
-        message =
-          role === "farmer"
-            ? `Your connection for ${crop} has been accepted.`
-            : `Your request for ${crop} has been accepted.`;
-      } else if (c.status === "rejected") {
-        message =
-          `Your request for ${crop} was rejected.`;
-      } else {
-        message =
-          role === "farmer"
-            ? `A buyer has requested ${crop} from your listing.`
-            : `Your request for ${crop} is awaiting a response.`;
+    async function loadNotifications() {
+      if (!user?._id) {
+        setNotifications([]);
+        setLoading(false);
+        return;
       }
 
-      return {
-        id: String(c._id),
-        crop,
-        message,
-        name: otherUser?.name || (
-          role === "farmer" ? "Buyer" : "Farmer"
-        ),
-        status: c.status || "pending",
-      };
-    })
-    .reverse();
+      setLoading(true);
+      setError("");
 
-  const unreadCount = notifications.filter(
-    (n) => !readIds.includes(n.id)
-  ).length;
-  
-if (notifications.length === 0 || unreadCount === 0) {
-  return null;
+      try {
+        const response = await api.get("/notifications/mine");
+
+        if (!cancelled) {
+          setNotifications(response.data.notifications || []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err.response?.data?.message ||
+              "Unable to load notifications."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadNotifications();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?._id]);
+
+async function markAsRead(notificationId) {
+  try {
+    await api.patch(`/notifications/${notificationId}/read`);
+
+    // Remove the entire notification card from the UI.
+    setNotifications((current) =>
+      current.filter((notification) => notification._id !== notificationId)
+    );
+  } catch (err) {
+    setError(
+      err.response?.data?.message ||
+        "Unable to mark notification as read."
+    );
+  }
 }
 
 
+  if (loading) {
+    return (
+      <section className={`${cardBase} p-5`}>
+        <p className="text-sm text-stone-500">
+          Loading notifications...
+        </p>
+      </section>
+    );
+  }
+
+  if (error && notifications.length === 0) {
+    return (
+      <section className={`${cardBase} p-5`}>
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      </section>
+    );
+  }
+  if (notifications.length === 0) {
+  return null;
+}
 
   return (
     <section className={`${cardBase} p-5 sm:p-6`}>
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-green-950">
             Notifications
           </h2>
-          <p className="text-sm text-stone-500 mt-1">
-            Request and connection updates
+          <p className="mt-1 text-sm text-stone-500">
+            Important connection updates
           </p>
         </div>
 
-        <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-          {unreadCount} unread
-        </span>
+        {notifications.length > 0 && (
+          <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+            {notifications.length} new
+          </span>
+        )}
       </div>
+
+      {error && (
+        <p role="alert" className="mb-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
       {notifications.length === 0 ? (
         <div className="rounded-xl bg-green-50/70 px-4 py-6 text-center">
           <p className="font-medium text-green-900">
             You're all caught up
           </p>
-          <p className="text-sm text-stone-500 mt-1">
-            New request updates will appear here.
+          <p className="mt-1 text-sm text-stone-500">
+            New connection updates will appear here.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {notifications.map((n) => {
-            const isRead = readIds.includes(n.id);
+        
+<div className="divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+  {notifications.map((n) => {
+    const isAccepted = n.type === "accepted";
+    const isRejected = n.type === "rejected";
+    const isUnread = !n.isRead;
 
-            return (
-              <article
-                key={n.id}
-                className={`rounded-xl border p-4 ${
-                  isRead
-                    ? "border-stone-200 bg-white"
-                    : "border-green-200 bg-green-50"
-                }`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-green-950">
-                        {n.status === "accepted"
-                          ? "Request accepted"
-                          : n.status === "rejected"
-                          ? "Request rejected"
-                          : "Connection update"}
-                      </h3>
+    const iconStyle = isAccepted
+      ? "bg-emerald-100 text-emerald-700 ring-emerald-200"
+      : isRejected
+      ? "bg-red-100 text-red-700 ring-red-200"
+      : "bg-amber-100 text-amber-700 ring-amber-200";
 
-                      {!isRead && (
-                        <span className="rounded-full bg-green-700 px-2 py-0.5 text-xs font-medium text-white">
-                          Unread
-                        </span>
-                      )}
-                    </div>
+    const icon = isAccepted
+      ? "✓"
+      : isRejected
+      ? "×"
+      : "↗";
 
-                    <p className="text-sm text-stone-600 mt-1">
-                      {n.message}
-                    </p>
+    return (
+      <article
+        key={n._id}
+        className={`group flex flex-col gap-4 px-4 py-5 transition-colors duration-200 sm:flex-row sm:items-start sm:px-5 ${
+          isUnread
+            ? "bg-green-50/50 hover:bg-green-50"
+            : "bg-white hover:bg-stone-50/80"
+        }`}
+      >
+        {/* Notification icon */}
+        <div className="relative shrink-0">
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl font-bold ring-1 ${iconStyle}`}
+          >
+            {icon}
+          </div>
 
-                    <p className="text-xs text-stone-500 mt-2">
-                      {n.name} · {n.crop}
-                    </p>
-                  </div>
-
-                  {!isRead && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setReadIds((previous) =>
-                          previous.includes(n.id)
-                            ? previous
-                            : [...previous, n.id]
-                        )
-                      }
-                      className={btn2}
-                    >
-                      Mark as read
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+          {isUnread && (
+            <span
+              className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-green-600"
+              aria-label="Unread notification"
+            />
+          )}
         </div>
+
+        {/* Notification content */}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold leading-5 text-green-950">
+              {n.title}
+            </h3>
+
+            {isUnread && (
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-800">
+                New
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1.5 text-sm leading-6 text-stone-600">
+            {n.message}
+          </p>
+
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-stone-400">
+            <span aria-hidden="true">◷</span>
+            {n.createdAt
+              ? new Date(n.createdAt).toLocaleString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "Time unavailable"}
+          </p>
+        </div>
+
+        {/* Action */}
+        {isUnread && (
+          <button
+            type="button"
+            onClick={() => markAsRead(n._id)}
+            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-green-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-green-800 shadow-sm transition hover:border-green-700 hover:bg-green-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 sm:self-center"
+          >
+            <span aria-hidden="true">✓</span>
+            Mark as read
+          </button>
+        )}
+      </article>
+    );
+  })}
+</div>
+
       )}
     </section>
   );
 }
+
 
 function FarmerFeedback() {
   const { user } = useApp();
@@ -1308,7 +1379,7 @@ function FarmerProduce() {
   const rows = produce.filter(
     (p) =>
       p.farmerId === user._id &&
-      p.crop.toLowerCase().includes(q.toLowerCase())
+      (p.crop || "").toLowerCase().includes(q.toLowerCase())
   );
 
   // Scroll to and highlight the selected produce
@@ -1379,7 +1450,7 @@ function FarmerProduce() {
     "Crop",
     "Quantity",
     "Quality",
-    "Location",
+    "district",
     "Available",
     "Status",
     "Actions",
@@ -1731,7 +1802,7 @@ return (
 
         <input
           className={inp}
-          placeholder="District"
+          placeholder="district"
           value={f.district}
           onChange={set("district")}
           required
@@ -1823,12 +1894,14 @@ return (
 }
 
 
-
 function FarmerRequests({ onlyAccepted = false }) {
   const { user, users, produce, conns, setConns } = useApp();
 
   const [farmerReviews, setFarmerReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const pendingSectionRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1871,22 +1944,61 @@ function FarmerRequests({ onlyAccepted = false }) {
   const rows = conns
     .map((c) => ({
       c,
-      p: produce.find((p) => String(p._id) === String(c.produceId)),
-      b: users.find((u) => String(u._id) === String(c.buyerId)),
+      p: produce.find(
+        (item) =>
+          String(item._id) === String(c.produceId?._id || c.produceId)
+      ),
+      b: users.find(
+        (item) =>
+          String(item._id) === String(c.buyerId?._id || c.buyerId)
+      ),
     }))
     .filter(
       ({ p, c }) =>
-        p?.farmerId === user?._id &&
+        String(p?.farmerId?._id || p?.farmerId) === String(user?._id) &&
         (!onlyAccepted || c.status === "accepted")
-    );
+    )
+    .sort((a, b) => {
+      // Put pending requests first, then show the newest first.
+      if (a.c.status === "pending" && b.c.status !== "pending") return -1;
+      if (a.c.status !== "pending" && b.c.status === "pending") return 1;
+
+      return (
+        new Date(b.c.createdAt || 0) -
+        new Date(a.c.createdAt || 0)
+      );
+    });
+
+  const pendingCount = rows.filter(
+    ({ c }) => c.status === "pending"
+  ).length;
+
+  useEffect(() => {
+    if (!onlyAccepted && pendingCount > 0) {
+      const frame = requestAnimationFrame(() => {
+        pendingSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [onlyAccepted, pendingCount]);
 
   const upd = async (id, status) => {
+    if (updatingId) return;
+
+    setUpdatingId(String(id));
+
     try {
       await api.patch(`/connections/${id}/status`, { status });
 
       setConns((previous) =>
         previous.map((c) =>
-          String(c._id) === String(id) ? { ...c, status } : c
+          String(c._id) === String(id)
+            ? { ...c, status }
+            : c
         )
       );
     } catch (error) {
@@ -1894,107 +2006,264 @@ function FarmerRequests({ onlyAccepted = false }) {
         error.response?.data?.message ||
           "Unable to update request."
       );
+    } finally {
+      setUpdatingId(null);
     }
   };
 
   return (
     <Page role="farmer">
-      <h1 className="font-serif text-3xl font-semibold text-green-900">
-        {onlyAccepted ? "Connections" : "Buyer Requests"}
-      </h1>
+      <div className="space-y-6">
+        {/* Page heading */}
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-green-200 pb-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+              Farmer dashboard
+            </p>
 
-      <Table
-        heads={[
-          "Buyer",
-          "Crop",
-          "Status",
-          onlyAccepted ? "Contact" : "Actions",
-          ...(onlyAccepted ? ["Rating & Review"] : []),
-        ]}
-        rows={rows.map(({ c, p, b }) => {
-          const review = farmerReviews.find(
-            (r) =>
-              String(r.connectionId?._id || r.connectionId) ===
-              String(c._id)
-          );
+            <h1 className="mt-1 font-serif text-3xl font-semibold text-green-950">
+              {onlyAccepted ? "Connections" : "Buyer Requests"}
+            </h1>
 
-          return [
-            b?.name || "Buyer information unavailable",
-            p?.crop || "Produce unavailable",
-            <Badge s={c.status} />,
-            onlyAccepted ? (
-              `${b?.phone || "No phone"} · ${b?.email || "No email"}`
-            ) : c.status === "pending" ? (
-              <span className="flex flex-wrap gap-2">
-                <button
-                  className={btn}
-                  onClick={() => upd(c._id, "accepted")}
-                >
-                  Accept
-                </button>
-                <button
-                  className={btn2}
-                  onClick={() => upd(c._id, "rejected")}
-                >
-                  Reject
-                </button>
-              </span>
-            ) : (
-              <span className="text-green-700 font-medium">
-    Connected
-  </span>
-            ),
-            ...(onlyAccepted
-              ? [
-                  reviewsLoading ? (
-                    <span className="text-stone-500">
-                      Loading reviews...
-                    </span>
-                  ) : review ? (
-                    <div className="min-w-40">
-                      <div className="font-medium text-amber-600">
-                        {"★".repeat(
-                          Math.max(
-                            0,
-                            Math.min(5, Number(review.overallRating) || 0)
-                          )
-                        )}
-                        {"☆".repeat(
-                          5 -
-                            Math.max(
-                              0,
-                              Math.min(5, Number(review.overallRating) || 0)
-                            )
-                        )}
-                        <span className="ml-1 text-stone-700">
-                          {review.overallRating}/5
-                        </span>
-                      </div>
+            <p className="mt-2 text-sm text-stone-600">
+              {onlyAccepted
+                ? "View connected buyers, their contact details and reviews."
+                : "Review incoming buyer requests and respond directly."}
+            </p>
+          </div>
 
-                      <p className="mt-1 text-xs text-stone-600">
-                        Quality: {review.qualityRating}/5 · Service:{" "}
-                        {review.serviceRating}/5
+          {!onlyAccepted && (
+            <div
+              className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+                pendingCount > 0
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-green-200 bg-green-50"
+              }`}
+            >
+              <div
+                className={`flex h-11 w-11 items-center justify-center rounded-xl text-xl ${
+                  pendingCount > 0
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-green-100 text-green-800"
+                }`}
+              >
+                {pendingCount > 0 ? "!" : "✓"}
+              </div>
+
+              <div>
+                <p className="text-2xl font-bold text-stone-900">
+                  {pendingCount}
+                </p>
+                <p className="text-xs font-medium text-stone-600">
+                  Pending requests
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pending requests callout */}
+        {!onlyAccepted && pendingCount > 0 && (
+          <div
+            ref={pendingSectionRef}
+            className="scroll-mt-24 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white p-5 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-lg text-amber-800">
+                !
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-amber-950">
+                  New buyer requests need your attention
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-amber-900/80">
+                  {pendingCount} request{pendingCount === 1 ? "" : "s"}{" "}
+                  {pendingCount === 1 ? "is" : "are"} waiting for your
+                  response. Accept or reject each request below.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Requests table */}
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/40 px-5 py-12 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100 text-2xl">
+              {onlyAccepted ? "🤝" : "🌱"}
+            </div>
+
+            <h2 className="mt-4 font-serif text-xl font-semibold text-green-950">
+              {onlyAccepted
+                ? "No accepted connections yet"
+                : "No buyer requests yet"}
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+              {onlyAccepted
+                ? "Accepted buyer connections will appear here with contact details and reviews."
+                : "When buyers request your produce, their requests will appear here for you to review."}
+            </p>
+          </div>
+        ) : (
+          <div
+            ref={!onlyAccepted ? pendingSectionRef : null}
+            className="scroll-mt-24 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"
+          >
+            <div className="border-b border-stone-100 px-4 py-4 sm:px-5">
+              <h2 className="font-serif text-xl font-semibold text-green-950">
+                {onlyAccepted ? "Your Connections" : "Incoming Requests"}
+              </h2>
+
+              <p className="mt-1 text-sm text-stone-500">
+                {rows.length} record{rows.length === 1 ? "" : "s"} · Pending
+                requests appear first.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table
+                heads={[
+                  "Buyer",
+                  "Crop",
+                  "Status",
+                  onlyAccepted ? "Contact" : "Actions",
+                  ...(onlyAccepted ? ["Rating & Review"] : []),
+                ]}
+                rows={rows.map(({ c, p, b }) => {
+                  const review = farmerReviews.find(
+                    (r) =>
+                      String(r.connectionId?._id || r.connectionId) ===
+                      String(c._id)
+                  );
+
+                  return [
+                    <div className="min-w-32 py-1">
+                      <p className="font-semibold text-green-950">
+                        {b?.name || "Buyer information unavailable"}
                       </p>
 
-                      {review.comment && (
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">
-                          {review.comment}
-                        </p>
+                      {!onlyAccepted && c.status === "pending" && (
+                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                          New Request
+                        </span>
                       )}
-                    </div>
-                  ) : (
-                    <span className="text-sm text-stone-500">
-                      No review yet
-                    </span>
-                  ),
-                ]
-              : []),
-          ];
-        })}
-      />
+                    </div>,
+
+                    <span className="font-medium text-stone-800">
+                      {p?.crop || "Produce unavailable"}
+                    </span>,
+
+                    <Badge s={c.status} />,
+
+                    onlyAccepted ? (
+                      <div className="min-w-44 text-sm text-stone-700">
+                        <p>{b?.phone || "No phone"}</p>
+                        <p className="mt-1 break-all text-stone-500">
+                          {b?.email || "No email"}
+                        </p>
+                      </div>
+                    ) : c.status === "pending" ? (
+                      <div className="flex min-w-44 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={`${btn} inline-flex items-center justify-center gap-1`}
+                          disabled={updatingId !== null}
+                          onClick={() => upd(c._id, "accepted")}
+                        >
+                          {updatingId === String(c._id)
+                            ? "Updating..."
+                            : "✓ Accept"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`${btn2} inline-flex items-center justify-center gap-1`}
+                          disabled={updatingId !== null}
+                          onClick={() => upd(c._id, "rejected")}
+                        >
+                          {updatingId === String(c._id)
+                            ? "Updating..."
+                            : "✕ Reject"}
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        className={`font-medium ${
+                          c.status === "accepted"
+                            ? "text-green-700"
+                            : "text-red-700"
+                        }`}
+                      >
+                        {c.status === "accepted"
+                          ? "✓ Connected"
+                          : "Request rejected"}
+                      </span>
+                    ),
+
+                    ...(onlyAccepted
+                      ? [
+                          reviewsLoading ? (
+                            <span className="text-sm text-stone-500">
+                              Loading reviews...
+                            </span>
+                          ) : review ? (
+                            <div className="min-w-40">
+                              <div className="font-medium text-amber-600">
+                                {"★".repeat(
+                                  Math.max(
+                                    0,
+                                    Math.min(
+                                      5,
+                                      Number(review.overallRating) || 0
+                                    )
+                                  )
+                                )}
+                                {"☆".repeat(
+                                  5 -
+                                    Math.max(
+                                      0,
+                                      Math.min(
+                                        5,
+                                        Number(review.overallRating) || 0
+                                      )
+                                    )
+                                )}
+                                <span className="ml-1 text-stone-700">
+                                  {review.overallRating}/5
+                                </span>
+                              </div>
+
+                              <p className="mt-1 text-xs text-stone-600">
+                                Quality: {review.qualityRating}/5 · Service:{" "}
+                                {review.serviceRating}/5
+                              </p>
+
+                              {review.comment && (
+                                <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">
+                                  {review.comment}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-stone-500">
+                              No review yet
+                            </span>
+                          ),
+                        ]
+                      : []),
+                  ];
+                })}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </Page>
   );
 }
+
 
 
     
@@ -2324,10 +2593,11 @@ const {
   conns = [],
   produce = [],
   users = [],
-} = useApp();  const mine = conns.filter((c) => c.buyerId === user._id);
+} = useApp(); 
+ const mine = conns.filter((c) => c.buyerId === user._id);
 const navigate = useNavigate();  
 const myReqs = reqs.filter((r) => r.buyerId === user._id);
-  const rec = produce.filter((p) => myReqs.some((r) => r.crop.toLowerCase() === p.crop.toLowerCase()));
+  const rec = produce.filter((p) => myReqs.some((r) => r.crop.toLowerCase() === (p.crop || "").toLowerCase()));
   return (
 
 <Page role="buyer">
@@ -2376,45 +2646,7 @@ const myReqs = reqs.filter((r) => r.buyerId === user._id);
 
     {/* Recommended produce */}
     <section className="space-y-4">
-      <div>
-        <h2 className="font-serif text-3xl font-semibold text-green-900">
-          Recommended Produce
-        </h2>
-        <p className="mt-1 text-sm text-stone-500">
-          Discover produce listed by farmers.
-        </p>
-      </div>
-
-      {rec.length > 0 ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {rec.map((p) => (
-            <ProduceCard key={p._id} p={p} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/70 px-5 py-8 text-center sm:px-8">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
-            🌱
-          </div>
-
-          <h3 className="font-serif text-lg font-semibold text-green-950">
-            Find the produce you need
-          </h3>
-
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
-            Post your crop requirements to help connect with farmers offering
-            the produce you are looking for.
-          </p>
-
-          <button
-            type="button"
-            onClick={() => navigate("/buyer/requirements")}
-            className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-offset-2"
-          >
-            + Post a Requirement
-          </button>
-        </div>
-      )}
+      
 
 <section className="space-y-5">
   <div className="flex flex-wrap items-end justify-between gap-3">
@@ -2490,7 +2722,7 @@ const myReqs = reqs.filter((r) => r.buyerId === user._id);
                     {p.crop}
                   </h3>
                   <p className="mt-1 text-sm text-stone-500">
-                    {p.district || "Location not specified"}
+                    {p.district || "district not specified"}
                   </p>
                 </div>
 
@@ -2538,6 +2770,45 @@ const myReqs = reqs.filter((r) => r.buyerId === user._id);
         })}
     </div>
   )}
+  <div>
+        <h2 className="font-serif text-3xl font-semibold text-green-900">
+          Recommended Produce
+        </h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Discover produce listed by farmers.
+        </p>
+      </div>
+
+      {rec.length > 0 ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {rec.map((p) => (
+            <ProduceCard key={p._id} p={p} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/70 px-5 py-8 text-center sm:px-8">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
+            🌱
+          </div>
+
+          <h3 className="font-serif text-lg font-semibold text-green-950">
+            Find the produce you need
+          </h3>
+
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+            Post your crop requirements to help connect with farmers offering
+            the produce you are looking for.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => navigate("/buyer/requirements")}
+            className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-offset-2"
+          >
+            + Post a Requirement
+          </button>
+        </div>
+      )}
 </section>
     </section>
 
@@ -2618,14 +2889,14 @@ function ProduceCard({ p }) {
 function BuyerSearch() {
   const { produce } = useApp();
   const [f, setF] = useState({ q: "", district: "", quality: "" });
-  const rows = produce.filter((p) => p.status === "Available" && p.crop.toLowerCase().includes(f.q.toLowerCase())
+  const rows = produce.filter((p) => p.status === "Available" && (p.crop || "").toLowerCase().includes(f.q.toLowerCase())
     && p.district.toLowerCase().includes(f.district.toLowerCase()) && (!f.quality || p.quality === f.quality));
   return (
     <Page role="buyer">
       <h1 className="font-serif text-3xl font-semibold text-green-900">Search Produce</h1>
       <div className={`${card} grid md:grid-cols-3 gap-3`}>
         <input className={inp} placeholder="Crop name" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
-        <input className={inp} placeholder="District" value={f.district} onChange={(e) => setF({ ...f, district: e.target.value })} />
+        <input className={inp} placeholder="district" value={f.district} onChange={(e) => setF({ ...f, district: e.target.value })} />
         <select className={inp} value={f.quality} onChange={(e) => setF({ ...f, quality: e.target.value })}><option value="">Any quality</option><option>Grade A</option><option>Grade B</option><option>Grade C</option></select>
       </div>
       <p className="text-sm text-stone-500">{rows.length} result(s)</p>
@@ -2638,11 +2909,18 @@ function BuyerSearch() {
 
 function ProduceDetails() {
   const { id } = useParams();
-  const { user, users, produce, conns, setConns, produceLoading } = useApp();
+  const {
+    user,
+    users,
+    produce,
+    conns,
+    setConns,
+    produceLoading,
+  } = useApp();
 
   const nav = useNavigate();
 
-  const p = produce.find((x) => x._id === id);
+  const p = produce.find((x) => String(x._id) === String(id));
 
   const [selectedImage, setSelectedImage] = useState(0);
   const [sending, setSending] = useState(false);
@@ -2668,6 +2946,7 @@ function ProduceDetails() {
             This listing may have been removed or is no longer available.
           </p>
           <button
+            type="button"
             className={btn}
             onClick={() => nav("/buyer/search")}
           >
@@ -2678,44 +2957,81 @@ function ProduceDetails() {
     );
   }
 
-  const farmer = users.find((u) => u._id === p.farmerId);
-
-  const conn = conns.find(
-    (c) => c.buyerId === user?._id && c.produceId === p._id
+  const farmer = users.find(
+    (u) => String(u._id) === String(p.farmerId?._id || p.farmerId)
   );
 
+
+// Find all requests for this buyer and listing.
+const existingConnections = conns.filter(
+  (c) =>
+    String(c.buyerId?._id || c.buyerId) === String(user?._id) &&
+    String(c.produceId?._id || c.produceId) === String(p._id)
+);
+
+// Find the latest request using its creation date.
+const conn =
+  existingConnections.length > 0
+    ? [...existingConnections].sort(
+        (a, b) =>
+          new Date(b.createdAt || 0) -
+          new Date(a.createdAt || 0)
+      )[0]
+    : null;
+
+// Show contact details if any request was accepted.
+const acceptedConnection = existingConnections.find(
+  (c) => c.status === "accepted"
+);
+
+// Allow another request only if there is no previous request,
+// or the latest request was accepted or rejected.
+const canSendRequest =
+  !conn ||
+  conn.status === "accepted" ||
+  conn.status === "rejected";
+
+
+
   const images = p.images?.length ? p.images : [];
+
   const otherCrops = produce
-    .filter((item) => item.farmerId === p.farmerId && item._id !== p._id)
+    .filter(
+      (item) =>
+        String(item.farmerId?._id || item.farmerId) ===
+          String(p.farmerId?._id || p.farmerId) &&
+        String(item._id) !== String(p._id)
+    )
     .map((item) => item.crop);
 
   const sendRequest = async () => {
-    if (sending || conn) return;
+    // Do not block a new request just because an earlier one exists.
+    if (sending || !user || !farmer) return;
 
     setSending(true);
     setErr("");
 
     try {
       const response = await api.post("/connections", {
-        farmerId: p.farmerId,
+        farmerId: p.farmerId?._id || p.farmerId,
         produceId: p._id,
       });
 
       const c = response.data.connection;
 
-      setConns((previous) => [
-        ...previous.filter(
-          (item) =>
-            !(item.buyerId === user._id && item.produceId === p._id)
+      const newConnection = {
+        ...c,
+        _id: c._id || c.id,
+        buyerId: String(c.buyerId?._id || c.buyerId || user._id),
+        farmerId: String(
+          c.farmerId?._id || c.farmerId || p.farmerId?._id || p.farmerId
         ),
-        {
-          _id: c.id || c._id,
-          buyerId: user._id,
-          farmerId: p.farmerId,
-          produceId: p._id,
-          status: c.status || "pending",
-        },
-      ]);
+        produceId: String(c.produceId?._id || c.produceId || p._id),
+        status: c.status || "pending",
+      };
+
+      // Keep previous requests and append the new request.
+      setConns((previous) => [...previous, newConnection]);
     } catch (error) {
       setErr(
         error.response?.data?.message ||
@@ -2729,23 +3045,18 @@ function ProduceDetails() {
   return (
     <Page role="buyer">
       <div className="space-y-6">
-
         {/* Navigation */}
-        
-<button
-  type="button"
-  onClick={() => nav("/buyer/search")}
-  className="inline-flex items-center gap-2 rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 shadow-sm transition hover:bg-green-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
->
-  <span aria-hidden="true">←</span>
-  Back to Search
-</button>
-
-
+        <button
+          type="button"
+          onClick={() => nav("/buyer/search")}
+          className="inline-flex items-center gap-2 rounded-xl border border-green-700 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 shadow-sm transition hover:bg-green-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
+        >
+          <span aria-hidden="true">←</span>
+          Back to Search
+        </button>
 
         {/* Main product section */}
-        <div className="grid lg:grid-cols-2 gap-6 items-start">
-
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           {/* Photo gallery */}
           <section className={`${cardBase} overflow-hidden`}>
             <div className="relative bg-gradient-to-br from-green-50 via-emerald-50 to-amber-50">
@@ -2753,21 +3064,21 @@ function ProduceDetails() {
                 <img
                   src={images[selectedImage] || images[0]}
                   alt={`${p.crop} photo`}
-                  className="w-full h-72 sm:h-96 object-contain"
+                  className="h-72 w-full object-contain sm:h-96"
                 />
               ) : (
-                <div className="h-72 sm:h-96 grid place-items-center">
+                <div className="grid h-72 place-items-center sm:h-96">
                   <span className="text-8xl">{emoji(p.crop)}</span>
                 </div>
               )}
 
-              <span className="absolute top-4 left-4">
+              <span className="absolute left-4 top-4">
                 <Badge s={p.status || "Available"} />
               </span>
             </div>
 
             {images.length > 1 && (
-              <div className="p-3 grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-5 gap-2 p-3">
                 {images.map((url, index) => (
                   <button
                     key={`${p._id}-detail-${index}`}
@@ -2793,45 +3104,45 @@ function ProduceDetails() {
           {/* Product information */}
           <section className={`${card} space-y-5`}>
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-semibold">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
                   Agricultural Produce
                 </span>
-                <span className="rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-semibold">
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
                   {p.quality || "Quality not specified"}
                 </span>
               </div>
 
-              <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-green-950">
+              <h1 className="font-serif text-3xl font-semibold text-green-950 sm:text-4xl">
                 {emoji(p.crop)} {p.crop}
               </h1>
 
-              <p className="text-stone-500 mt-2 text-sm">
+              <p className="mt-2 text-sm text-stone-500">
                 Fresh produce directly from the farmer
               </p>
             </div>
 
-            <div className="rounded-2xl bg-green-50 border border-green-100 p-5">
-              <p className="text-xs uppercase tracking-wide text-green-700 font-semibold">
+            <div className="rounded-2xl border border-green-100 bg-green-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
                 Available Quantity
               </p>
-              <p className="text-3xl font-bold text-green-950 mt-1">
+              <p className="mt-1 text-3xl font-bold text-green-950">
                 {p.quantity}{" "}
                 <span className="text-lg font-medium">{p.unit}</span>
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-stone-200 p-4">
-                <p className="text-xs text-stone-500">Location</p>
-                <p className="font-medium text-stone-800 mt-1">
+                <p className="text-xs text-stone-500">district</p>
+                <p className="mt-1 font-medium text-stone-800">
                   {p.district}, {p.state}
                 </p>
               </div>
 
               <div className="rounded-xl border border-stone-200 p-4">
                 <p className="text-xs text-stone-500">Available From</p>
-                <p className="font-medium text-stone-800 mt-1">
+                <p className="mt-1 font-medium text-stone-800">
                   {p.date
                     ? new Date(`${p.date}T00:00:00`).toLocaleDateString(
                         "en-IN",
@@ -2847,14 +3158,14 @@ function ProduceDetails() {
 
               <div className="rounded-xl border border-stone-200 p-4">
                 <p className="text-xs text-stone-500">Quality Grade</p>
-                <p className="font-medium text-stone-800 mt-1">
+                <p className="mt-1 font-medium text-stone-800">
                   {p.quality || "Not specified"}
                 </p>
               </div>
 
               <div className="rounded-xl border border-stone-200 p-4">
                 <p className="text-xs text-stone-500">Listing Status</p>
-                <p className="font-medium text-stone-800 mt-1">
+                <p className="mt-1 font-medium text-stone-800">
                   {p.status || "Available"}
                 </p>
               </div>
@@ -2865,50 +3176,63 @@ function ProduceDetails() {
                 <h2 className="font-semibold text-green-950">
                   About this Produce
                 </h2>
-                <p className="text-sm text-stone-600 leading-relaxed mt-2 whitespace-pre-wrap">
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-stone-600">
                   {p.description}
                 </p>
               </div>
             )}
 
+            {/* Connection requests */}
             <div className="border-t border-stone-200 pt-5">
-              <h2 className="font-semibold text-green-950 mb-3">
+              <h2 className="mb-3 font-semibold text-green-950">
                 Interested in this produce?
               </h2>
 
-              {!conn ? (
-                <button
-                  type="button"
-                  className={`${btn} w-full py-3`}
-                  onClick={sendRequest}
-                  disabled={sending}
-                >
-                  {sending ? "Sending Request..." : "Send Connection Request"}
-                </button>
-              ) : (
-                <div className="rounded-xl bg-green-50 border border-green-100 p-4">
-                  <p className="font-semibold text-green-900">
-                    {conn.status === "accepted"
-                      ? "Connection Accepted"
-                      : conn.status === "rejected"
-                      ? "Request Rejected"
-                      : "Connection Request Sent"}
-                  </p>
-                  <p className="text-sm text-stone-600 mt-1">
-                    {conn.status === "accepted"
-                      ? "You can now view the farmer's contact information below."
-                      : conn.status === "rejected"
-                      ? "This request was rejected. Contact details remain hidden."
-                      : "Wait for the farmer to respond to your request."}
-                  </p>
-                </div>
-              )}
+              
+{canSendRequest && (
+  <button
+    type="button"
+    className={`${btn} w-full py-3`}
+    onClick={sendRequest}
+    disabled={sending || !farmer}
+  >
+    {sending
+      ? "Sending Request..."
+      : conn
+        ? "Send Connection Request Again"
+        : "Send Connection Request"}
+  </button>
+)}
+
+{conn && (
+  <div className="mt-3 rounded-xl border border-green-100 bg-green-50 p-4">
+    <p className="font-semibold text-green-900">
+      Previous request:{" "}
+      {conn.status === "accepted"
+        ? "Connection Accepted"
+        : conn.status === "rejected"
+          ? "Request Rejected"
+          : "Connection Request Sent"}
+    </p>
+
+    <p className="mt-1 text-sm text-stone-600">
+      {conn.status === "accepted"
+        ? "The farmer accepted your request. You can send another request if needed."
+        : conn.status === "rejected"
+          ? "The farmer rejected your request. You can send another request."
+          : "Your request is awaiting the farmer's response. Another request cannot be sent yet."}
+    </p>
+  </div>
+)}
+
 
               {err && (
-                <p className="text-sm text-red-600 mt-3">{err}</p>
+                <p className="mt-3 text-sm text-red-600" role="alert">
+                  {err}
+                </p>
               )}
 
-              <p className="text-xs text-stone-500 mt-3">
+              <p className="mt-3 text-xs text-stone-500">
                 AgriSetu connects buyers and farmers directly. Price and
                 transaction arrangements can be discussed between both parties.
               </p>
@@ -2918,28 +3242,25 @@ function ProduceDetails() {
 
         {/* Farmer information */}
         <section className={`${card} space-y-4`}>
-          
+          <div className="border-b border-green-200 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+              Seller Information
+            </p>
 
-<div className="border-b border-green-200 pb-4">
-  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
-    Seller Information
-  </p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold text-green-950 sm:text-3xl">
+              Meet the Farmer
+            </h2>
 
-  <h2 className="mt-1 font-serif text-2xl font-semibold text-green-950 sm:text-3xl">
-    Meet the Farmer
-  </h2>
-
-  <div className="mt-3 h-1 w-14 rounded-full bg-green-700" />
-</div>
-
-
+            <div className="mt-3 h-1 w-14 rounded-full bg-green-700" />
+          </div>
 
           {farmer ? (
             <>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-green-100 text-green-900 grid place-items-center text-xl font-bold">
+                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-green-100 text-xl font-bold text-green-900">
                   {(farmer.name || "F")[0].toUpperCase()}
                 </div>
+
                 <div>
                   <h3 className="font-semibold text-green-950">
                     {farmer.name}
@@ -2951,8 +3272,8 @@ function ProduceDetails() {
                 </div>
               </div>
 
-              {conn?.status === "accepted" ? (
-                <div className="rounded-xl bg-green-50 border border-green-100 p-4 space-y-2">
+              {acceptedConnection ? (
+                <div className="space-y-2 rounded-xl border border-green-100 bg-green-50 p-4">
                   <h3 className="font-semibold text-green-900">
                     Contact Details
                   </h3>
@@ -2963,7 +3284,6 @@ function ProduceDetails() {
                     Email: {farmer.email || "Not provided"}
                   </p>
                 </div>
-                
               ) : (
                 <p className="text-sm text-stone-500">
                   Farmer contact details become available after your connection
@@ -2973,14 +3293,14 @@ function ProduceDetails() {
 
               {otherCrops.length > 0 && (
                 <div>
-                  <h3 className="font-semibold text-green-950 mb-2">
+                  <h3 className="mb-2 font-semibold text-green-950">
                     Other Produce from this Farmer
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {otherCrops.map((crop, index) => (
                       <span
                         key={`${crop}-${index}`}
-                        className="rounded-full bg-stone-100 border border-stone-200 px-3 py-1.5 text-sm text-stone-700"
+                        className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1.5 text-sm text-stone-700"
                       >
                         {emoji(crop)} {crop}
                       </span>
@@ -2988,14 +3308,14 @@ function ProduceDetails() {
                   </div>
                 </div>
               )}
+
+              <ProduceReviews farmerId={farmer._id} />
             </>
           ) : (
             <p className="text-sm text-stone-500">
               Farmer profile information is currently unavailable.
             </p>
           )}
-          
-<ProduceReviews farmerId={farmer._id} />
         </section>
       </div>
     </Page>
@@ -3210,285 +3530,536 @@ const set = (key) => (e) => {
     </section>
   </div>
 </Page>
-
-
-
   );
 }
 
 
 function BuyerConns() {
-const { user, users, produce, conns } = useApp();
-const [reviewedIds, setReviewedIds] = useState(new Set());
-const [reviewLoading, setReviewLoading] = useState(true);
-const [reviewError, setReviewError] = useState("");
-const [reviewingConnectionId, setReviewingConnectionId] = useState(null);
+  const { user, users, produce, conns, setConns } = useApp();
 
+  const [reviewedIds, setReviewedIds] = useState(new Set());
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewingConnectionId, setReviewingConnectionId] = useState(null);
+  const [connectionNotice, setConnectionNotice] = useState(null);
+
+  const connectionRefs = useRef({});
+  const previousStatuses = useRef({});
+
+  
+const [searchTerm, setSearchTerm] = useState("");
+const [statusFilter, setStatusFilter] = useState("all");
+const [dateSort, setDateSort] = useState("newest");
+   // Refresh connection statuses from the backend every 5 seconds.
 useEffect(() => {
-let cancelled = false;
+  if (!user?._id) return;
 
+  let cancelled = false;
 
-const loadMyReviews = async () => {
-  try {
-    const response = await api.get("/reviews/mine");
-    const ids = new Set(
-      (response.data.reviews || []).map((review) =>
-        String(review.connectionId)
-      )
-    );
+  const refreshConnections = async () => {
+    try {
+      const response = await api.get("/connections/mine");
+      if (cancelled) return;
 
-    if (!cancelled) setReviewedIds(ids);
-  } catch {
-    if (!cancelled) {
-      setReviewError("Unable to check your review history.");
-    }
-  } finally {
-    if (!cancelled) setReviewLoading(false);
+      const latestConnections = response.data.connections || [];
+      const changed = [];
+
+for (const connection of latestConnections) {
+  const id = String(connection._id || connection.id);
+
+  const buyerId =
+    connection.buyerId?._id || connection.buyerId;
+
+  // Only track connections belonging to this buyer.
+  if (String(buyerId) !== String(user._id)) continue;
+
+  const status = connection.status;
+  const previousStatus = previousStatuses.current[id];
+
+  // Notify only when a pending connection changes status.
+  if (
+    previousStatus === "pending" &&
+    ["accepted", "rejected"].includes(status)
+  ) {
+    changed.push({ id, status, connection });
   }
-};
 
-loadMyReviews();
+  previousStatuses.current[id] = status;
+}
 
-return () => {
-  cancelled = true;
-};
+      setConns((previous) => {
+        const previousById = new Map(
+          previous.map((item) => [
+            String(item._id || item.id),
+            item,
+          ])
+        );
+
+        return latestConnections.map((latest) => ({
+          ...previousById.get(String(latest._id || latest.id)),
+          ...latest,
+          _id: latest._id || latest.id,
+        }));
+      });
+
+      if (changed.length > 0) {
+        const latestChange = changed[changed.length - 1];
+        const { id, status, connection } = latestChange;
+
+        const productId =
+          connection.produceId?._id || connection.produceId;
+
+        const product = produce.find(
+          (item) => String(item._id) === String(productId)
+        );
+
+        setConnectionNotice({
+          id,
+          status,
+          crop: product?.crop || "your requested produce",
+          key: `${id}-${status}`,
+        });
+
+      }
+    } catch (error) {
+      console.error(
+        "Unable to refresh connections:",
+        error.response?.data || error.message
+      );
+    }
+  };
+
+  refreshConnections();
+
+  const intervalId = setInterval(refreshConnections, 5000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(intervalId);
+  };
+}, [user?._id, setConns, produce]);
 
 
-}, []);
 
-const handleReviewSubmitted = (connectionId) => {
-  setReviewedIds((previous) => {
-    const updated = new Set(previous);
-    updated.add(String(connectionId));
-    return updated;
+  // Load the buyer's submitted reviews.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMyReviews = async () => {
+      try {
+        const response = await api.get("/reviews/mine");
+
+        const ids = new Set(
+          (response.data.reviews || []).map((review) =>
+            String(review.connectionId?._id || review.connectionId)
+          )
+        );
+
+        if (!cancelled) setReviewedIds(ids);
+      } catch {
+        if (!cancelled) {
+          setReviewError("Unable to check your review history.");
+        }
+      } finally {
+        if (!cancelled) setReviewLoading(false);
+      }
+    };
+
+    loadMyReviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Build the buyer's connection list.
+  const mine = conns
+    .filter(
+      (connection) =>
+        String(connection.buyerId?._id || connection.buyerId) ===
+        String(user?._id)
+    )
+    .map((connection) => {
+      const productId =
+        connection.produceId?._id || connection.produceId;
+
+      const product = produce.find(
+        (item) => String(item._id) === String(productId)
+      );
+
+      const farmerId =
+        product?.farmerId?._id ||
+        product?.farmerId ||
+        connection.farmerId?._id ||
+        connection.farmerId;
+
+      const farmer = users.find(
+        (item) => String(item._id) === String(farmerId)
+      );
+
+      return { connection, product, farmer };
+    })
+    
+
+
+const filteredConnections = mine
+  .filter(({ connection, product, farmer }) => {
+    const query = searchTerm.trim().toLowerCase();
+
+    const matchesSearch =
+      !query ||
+      (product?.crop || "").toLowerCase().includes(query) ||
+      (farmer?.name || "").toLowerCase().includes(query) ||
+      (product?.district || "").toLowerCase().includes(query);
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      connection.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  })
+  .sort((a, b) => {
+    const dateA = new Date(
+      a.connection.updatedAt ||
+      a.connection.createdAt ||
+      0
+    ).getTime();
+
+    const dateB = new Date(
+      b.connection.updatedAt ||
+      b.connection.createdAt ||
+      0
+    ).getTime();
+
+    return dateSort === "newest"
+      ? dateB - dateA
+      : dateA - dateB;
   });
 
-  setReviewingConnectionId(null);
-};
 
-const mine = conns.filter(
-(connection) => connection.buyerId === user?._id
-);
+  const handleReviewSubmitted = (connectionId) => {
+    setReviewedIds((previous) => {
+      const updated = new Set(previous);
+      updated.add(String(connectionId));
+      return updated;
+    });
 
-return ( 
-<Page role="buyer">
-  <div className="space-y-6">
+    setReviewingConnectionId(null);
+  };
 
-    {/* Page heading */}
-    <div className="border-b border-green-200 pb-5">
-      <h1 className="font-serif text-4xl font-semibold text-green-900">
-        My Connections
-      </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-        Track your farmer connections and share your experience after a
-        connection is accepted.
-      </p>
-    </div>
-
-    {/* Error message */}
-    {reviewError && (
-      <div
-        role="alert"
-        className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-      >
-        {reviewError}
-      </div>
-    )}
-
-    {/* Empty state */}
-    {mine.length === 0 ? (
-      <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/60 px-5 py-10 text-center sm:px-8">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
-          🌱
+  return (
+    <Page role="buyer">
+      <div className="space-y-6">
+        <div className="border-b border-green-200 pb-5">
+          <h1 className="font-serif text-4xl font-semibold text-green-900">
+            My Connections
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+            Track your farmer connections and share your experience after a
+            connection is accepted.
+          </p>
         </div>
-        <h2 className="mt-4 font-serif text-xl font-semibold text-green-950">
-          No connections yet
-        </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
-          Explore available produce and connect directly with farmers to get
-          started.
-        </p>
-        <Link
-          to="/buyer/search"
-          className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900"
-        >
-          Find Produce →
-        </Link>
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 gap-5">
-        {mine.map((connection) => {
-          const product = produce.find(
-            (item) => item._id === connection.produceId
-          );
 
-          const farmer = users.find(
-            (item) =>
-              item._id === (product?.farmerId || connection.farmerId)
-          );
+        
+<div className="grid grid-cols-1 gap-3 rounded-2xl border border-green-100 bg-white p-4 sm:grid-cols-3">
+  <input
+    type="search"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    placeholder="Search crop, farmer, district..."
+    aria-label="Search connections"
+    className="w-full rounded-xl border border-stone-300 px-3 py-3 text-sm outline-none focus:border-green-700 focus:ring-1 focus:ring-green-700"
+  />
 
-          const reviewed = reviewedIds.has(String(connection._id));
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    aria-label="Filter connections by status"
+    className="w-full rounded-xl border border-stone-300 bg-white px-3 py-3 text-sm"
+  >
+    <option value="all">All statuses</option>
+    <option value="pending">Pending</option>
+    <option value="accepted">Accepted</option>
+    <option value="rejected">Rejected</option>
+  </select>
 
-          return (
-            <article
-              key={connection._id}
-              className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm transition hover:border-green-200 hover:shadow-md"
-            >
-              {/* Connection header */}
-              <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
-                <div className="flex min-w-0 items-start gap-4">
-                  
-<div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl border border-green-100 bg-green-50 shadow-sm">
-  {product?.images?.[0] ? (
-    <img
-      src={product.images[0]}
-      alt={product.crop || "Produce"}
-      className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-      loading="lazy"
-    />
-  ) : (
-    <div className="flex h-full items-center justify-center text-xs text-green-700">
-      No image
-    </div>
-  )}
+  <select
+    value={dateSort}
+    onChange={(e) => setDateSort(e.target.value)}
+    aria-label="Sort connections by date"
+    className="w-full rounded-xl border border-stone-300 bg-white px-3 py-3 text-sm"
+  >
+    <option value="newest">Newest first</option>
+    <option value="oldest">Oldest first</option>
+  </select>
 </div>
 
+{connectionNotice && (
+  <div
+    role="status"
+    className={`rounded-xl border px-4 py-4 ${
+      connectionNotice.status === "accepted"
+        ? "border-green-200 bg-green-50 text-green-900"
+        : "border-red-200 bg-red-50 text-red-900"
+    }`}
+  >
+    <p className="font-semibold">
+      {connectionNotice.status === "accepted"
+        ? `Your ${connectionNotice.crop} connection was accepted!`
+        : `Your ${connectionNotice.crop} connection was rejected.`}
+    </p>
 
+    <p className="mt-1 text-sm">
+      The farmer has {connectionNotice.status} your request for{" "}
+      <strong>{connectionNotice.crop}</strong>.
+    </p>
 
-                  <div className="min-w-0">
-                    <h2 className="font-serif text-xl font-semibold text-green-950">
-                      {product?.crop || "Produce unavailable"}
-                    </h2>
-                    <p className="mt-1 text-sm text-stone-600">
-                      Farmer:{" "}
-                      <span className="font-medium text-stone-800">
-                        {farmer?.name || "Farmer information unavailable"}
-                      </span>
-                    </p>
-
-                    {product && (
-                      <p className="mt-2 text-sm text-stone-500">
-                        {product.quantity} {product.unit}
-                        <span className="mx-2 text-stone-300">•</span>
-                        {product.district || "Location unavailable"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <Badge s={connection.status} />
-              </div>
-
-              {/* Contact details */}
-              <div className="border-t border-stone-100 px-5 py-4 sm:px-6">
-                {connection.status === "accepted" ? (
-                  <div className="rounded-xl border border-green-100 bg-green-50/70 p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-green-800">
-                      Connection accepted · Farmer contact
-                    </p>
-
-                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                      <p className="break-words text-stone-700">
-                        <span className="font-medium text-stone-900">
-                          Phone
-                        </span>
-                        <span className="mx-2 text-stone-300">·</span>
-                        {farmer?.phone || "Not provided"}
-                      </p>
-
-                      <p className="break-words text-stone-700">
-                        <span className="font-medium text-stone-900">
-                          Email
-                        </span>
-                        <span className="mx-2 text-stone-300">·</span>
-                        {farmer?.email || "Not provided"}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-600">
-                    Farmer contact details will be available when the
-                    connection is accepted.
-                  </p>
-                )}
-              </div>
-
-              {/* Review section */}
-              {connection.status === "accepted" && (
-                <div className="border-t border-stone-100 px-5 py-5 sm:px-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-green-950">
-                        Your experience
-                      </h3>
-                      <p className="mt-1 text-sm text-stone-500">
-                        Share feedback about the farmer and produce.
-                      </p>
-                    </div>
-
-                    {reviewLoading ? (
-                      <span className="text-sm text-stone-500">
-                        Checking review status...
-                      </span>
-                    ) : reviewed ? (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-2 text-sm font-medium text-green-800">
-                        <span aria-hidden="true">✓</span>
-                        Review submitted
-                      </span>
-                    ) : reviewError ? (
-                      <p role="alert" className="text-sm text-stone-600">
-                        Refresh the page to check your review status.
-                      </p>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReviewingConnectionId((current) =>
-                            current === String(connection._id)
-                              ? null
-                              : String(connection._id)
-                          )
-                        }
-                        className="inline-flex items-center justify-center rounded-xl border border-green-800 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
-                      >
-                        {reviewingConnectionId === String(connection._id)
-                          ? "Cancel Review"
-                          : "Write a Review"}
-                      </button>
-                    )}
-                  </div>
-
-                  {!reviewLoading &&
-                    !reviewed &&
-                    !reviewError &&
-                    reviewingConnectionId === String(connection._id) && (
-                      <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50/70 p-4 sm:p-5">
-                        <ConnectionReviewForm
-                          connection={connection}
-                          onSubmitted={handleReviewSubmitted}
-                        />
-                      </div>
-                    )}
-                </div>
-              )}
-            </article>
-          );
-        })}
-      </div>
-    )}
+    <button
+      type="button"
+      onClick={() => setConnectionNotice(null)}
+      className="mt-2 text-sm font-semibold underline"
+    >
+      Dismiss
+    </button>
   </div>
-</Page>
+)}
 
+{filteredConnections.length === 0 ? (          <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/60 px-5 py-10 text-center sm:px-8">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">
+              🌱
+            </div>
+            <h2 className="mt-4 font-serif text-xl font-semibold text-green-950">
+              No connections yet
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-600">
+              Explore available produce and connect directly with farmers to
+              get started.
+            </p>
+            <Link
+              to="/buyer/search"
+              className="mt-5 inline-flex items-center justify-center rounded-xl bg-green-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-900"
+            >
+              Find Produce →
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5">
+{filteredConnections.map(({ connection, product, farmer }) => {              const id = String(connection._id || connection.id);
+              const reviewed = reviewedIds.has(id);
+              const isUpdatedConnection = connectionNotice?.id === id;
 
+              return (
+                <article
+                  key={id}
+                  
+                  ref={(element) => {
+                    if (element) {
+                      connectionRefs.current[id] = element;
+                    } else {
+                      delete connectionRefs.current[id];
+                    }
+                  }}
+                  className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
+                    isUpdatedConnection
+                      ? connectionNotice.status === "accepted"
+                        ? "border-green-500 ring-2 ring-green-200"
+                        : "border-red-400 ring-2 ring-red-200"
+                      : "border-stone-200 hover:border-green-200 hover:shadow-md"
+                  }`}
+                >
+                  {isUpdatedConnection && (
+                    <div
+                      className={`px-5 py-3 text-sm font-semibold ${
+                        connectionNotice.status === "accepted"
+                          ? "bg-green-800 text-white"
+                          : "bg-red-700 text-white"
+                      }`}
+                    >
+                      {connectionNotice.status === "accepted"
+                        ? "✓ Your connection was accepted"
+                        : "✕ Your connection was rejected"}
+                    </div>
+                  )}
 
-);
+                  <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+                    <div className="flex min-w-0 items-start gap-4">
+                      <div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl border border-green-100 bg-green-50 shadow-sm">
+                        {product?.images?.[0] ? (
+                          <img
+                            src={product.images[0]}
+                            alt={product.crop || "Produce"}
+                            className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-green-700">
+                            No image
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <h2 className="font-serif text-xl font-semibold text-green-950">
+                          {product?.crop || "Produce unavailable"}
+                        </h2>
+                        <p className="mt-1 text-sm text-stone-600">
+                          Farmer:{" "}
+                          <span className="font-medium text-stone-800">
+                            {farmer?.name || "Farmer information unavailable"}
+                          </span>
+                        </p>
+
+                        {product && (
+                          <p className="mt-2 text-sm text-stone-500">
+                            {product.quantity} {product.unit}
+                            <span className="mx-2 text-stone-300">•</span>
+                            {product.district || "district unavailable"}
+                          </p>
+                        )}
+                      </div>
+                      
+<div className="mt-3 space-y-1 text-xs text-stone-500">
+  <p>
+    <span className="font-semibold text-stone-700">
+      Request date:
+    </span>{" "}
+    {formatConnectionDate(connection.createdAt)}
+  </p>
+
+  {["accepted", "rejected"].includes(connection.status) && (
+    <p>
+      <span className="font-semibold text-stone-700">
+        {connection.status === "accepted"
+          ? "Accepted date:"
+          : "Rejected date:"}
+      </span>{" "}
+      {formatConnectionDate(connection.updatedAt)}
+    </p>
+  )}
+</div>
+                    </div>
+
+                    <Badge s={connection.status} />
+                  </div>
+
+                  <div className="border-t border-stone-100 px-5 py-4 sm:px-6">
+                    {connection.status === "accepted" ? (
+                      <div className="rounded-xl border border-green-100 bg-green-50/70 p-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-green-800">
+                          Connection accepted · Farmer contact
+                        </p>
+
+                        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                          <p className="break-words text-stone-700">
+                            <span className="font-medium text-stone-900">
+                              Phone
+                            </span>
+                            <span className="mx-2 text-stone-300">·</span>
+                            {farmer?.phone || "Not provided"}
+                          </p>
+
+                          <p className="break-words text-stone-700">
+                            <span className="font-medium text-stone-900">
+                              Email
+                            </span>
+                            <span className="mx-2 text-stone-300">·</span>
+                            {farmer?.email || "Not provided"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="rounded-xl bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-600">
+                        Farmer contact details will be available when the
+                        connection is accepted.
+                      </p>
+         
+           )}
+                  </div>
+
+                  {connection.status === "accepted" && (
+                    <div className="border-t border-stone-100 px-5 py-5 sm:px-6">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold text-green-950">
+                            Your experience
+                          </h3>
+                          <p className="mt-1 text-sm text-stone-500">
+                            Share feedback about the farmer and produce.
+                          </p>
+                        </div>
+
+                        {reviewLoading ? (
+                          <span className="text-sm text-stone-500">
+                            Checking review status...
+                          </span>
+                        ) : reviewed ? (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-2 text-sm font-medium text-green-800">
+                            <span aria-hidden="true">✓</span>
+                            Review submitted
+                          </span>
+                        ) : reviewError ? (
+                          <p role="alert" className="text-sm text-stone-600">
+                            Refresh the page to check your review status.
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReviewingConnectionId((current) =>
+                                current === id ? null : id
+                              )
+                            }
+                            className="inline-flex items-center justify-center rounded-xl border border-green-800 bg-white px-4 py-2.5 text-sm font-semibold text-green-800 transition hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
+                          >
+                            {reviewingConnectionId === id
+                              ? "Cancel Review"
+                              : "Write a Review"}
+                          </button>
+                        )}
+                      </div>
+
+                      {!reviewLoading &&
+                        !reviewed &&
+                        !reviewError &&
+                        reviewingConnectionId === id && (
+                          <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50/70 p-4 sm:p-5">
+                            <ConnectionReviewForm
+                              connection={connection}
+                              onSubmitted={handleReviewSubmitted}
+                            />
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Page>
+  );
 }
 
 
 
+function formatConnectionDate(date) {
+  if (!date) return "Date unavailable";
 
-// ---------- Admin ----------
+  const parsed = new Date(date);
 
+  if (Number.isNaN(parsed.getTime())) {
+    return "Date unavailable";
+  }
+
+  return parsed.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 // ---------- App ----------
 export default function App() {

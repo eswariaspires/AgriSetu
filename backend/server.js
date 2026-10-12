@@ -6,10 +6,14 @@ import authRoutes from "./routes/authRoutes.js";
 import connectionRoutes from "./routes/connectionRoutes.js";
 import produceRoutes from "./routes/produceRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
 const app = express();
+
+
+
 mongoose.connection.on("disconnected", () => {
   console.log("MongoDB disconnected");
 });
@@ -22,12 +26,17 @@ mongoose.connection.on("error", (error) => {
   console.error("MongoDB error:", error.message);
 });
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json({ limit: "8mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/connections", connectionRoutes);
 app.use("/api/produce", produceRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
   res.json({

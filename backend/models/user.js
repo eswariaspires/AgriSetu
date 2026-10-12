@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
   type: String,
   trim: true,
 },
-district: {
+Location: {
   type: String,
   trim: true,
 },

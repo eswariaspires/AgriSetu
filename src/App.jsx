@@ -1,15 +1,15 @@
 import { createContext, useContext, useState, useRef, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import {
-BrowserRouter,
-Routes,
-Route,
-Link,
-useNavigate,
-useParams,
-useSearchParams,
-useLocation ,
-Navigate,
+  BrowserRouter,
+  Routes,
+  Route,
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+  useLocation,
+  Navigate,
 } from "react-router-dom";
 
 import axios from "axios";
@@ -82,9 +82,10 @@ const Badge = ({ s }) => {
 
 function Page({ role, children }) {
   const { user, setUser } = useApp();
+  
   const nav = useNavigate();
-const loc = useLocation();
-  if (!user || user.role !== role) return <Navigate to="/login" />;
+const loc = useLocation(); 
+ if (!user || user.role !== role) return <Navigate to="/login" />;
   return (
     <div className="min-h-screen bg-cream text-stone-800 md:flex">
 
@@ -957,7 +958,7 @@ function Register() {
 
                   <input
                     className={`${inp} mt-1`}
-                    placeholder="e.g. Chintalapudi, Chintalapudi Mandal, Eluru District"
+                    placeholder="e.g. Guntur "
                     value={f.district}
                     onChange={set("district")}
                   />
@@ -1308,9 +1309,19 @@ function FarmerFeedback() {
 
 function FarmerDash() {
   
-const { user, produce, conns, users } = useApp();  const mine = produce.filter((p) => p.farmerId === user._id);
-const farmerId = user?._id;  
-const reqs = conns.filter((c) => mine.some((p) => p._id === c.produceId));
+const { user, produce, conns, users } = useApp();  
+const mine = produce.filter(
+  (p) =>
+    String(p.farmerId?._id || p.farmerId) === String(user?._id)
+);
+
+const reqs = conns.filter((c) =>
+  mine.some(
+    (p) =>
+      String(p._id) ===
+      String(c.produceId?._id || c.produceId)
+  )
+);const farmerId = user?._id;  
   const navigate = useNavigate();
   return (
     <Page role="farmer">
@@ -1376,11 +1387,11 @@ function FarmerProduce() {
   const navigate = useNavigate();
 
   // Filter produce before using rows in useEffect
-  const rows = produce.filter(
-    (p) =>
-      p.farmerId === user._id &&
-      (p.crop || "").toLowerCase().includes(q.toLowerCase())
-  );
+ const rows = produce.filter(
+  (p) =>
+    String(p.farmerId?._id || p.farmerId) === String(user?._id) &&
+    (p.crop || "").toLowerCase().includes(q.toLowerCase())
+);
 
   // Scroll to and highlight the selected produce
   useEffect(() => {
@@ -1895,13 +1906,70 @@ return (
 
 
 function FarmerRequests({ onlyAccepted = false }) {
-  const { user, users, produce, conns, setConns } = useApp();
-
+const { user, users, produce, conns, setConns } = useApp();
+const [requestsLoading, setRequestsLoading] = useState(true);
   const [farmerReviews, setFarmerReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
-
+const [requestsError, setRequestsError] = useState("");
   const pendingSectionRef = useRef(null);
+
+  useEffect(() => {
+  let cancelled = false;
+
+  const loadConnections = async () => {
+    if (!user?._id) {
+      setRequestsLoading(false);
+      return;
+    }
+
+    setRequestsLoading(true);
+setRequestsError("");
+    try {
+      const response = await api.get("/connections/mine");
+
+      if (!cancelled) {
+        const connections = response.data.connections || [];
+
+        setConns((previous) => {
+          const updated = connections.map((c) => ({
+            ...c,
+            _id: c._id || c.id,
+            buyerId: c.buyerId,
+            farmerId: c.farmerId,
+            produceId: c.produceId,
+            status: c.status,
+          }));
+
+          // Preserve connections not returned by this response only
+          // if they belong to a different user context.
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Unable to load buyer requests:",
+        error.response?.data || error.message
+      );
+      if (!cancelled) {
+  setRequestsError(
+    error.response?.data?.message ||
+      "Unable to load buyer requests. Please try again."
+  );
+}
+    } finally {
+      if (!cancelled) {
+        setRequestsLoading(false);
+      }
+    }
+  };
+
+  loadConnections();
+
+  return () => {
+    cancelled = true;
+  };
+}, [user?._id, setConns]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2088,7 +2156,14 @@ function FarmerRequests({ onlyAccepted = false }) {
         )}
 
         {/* Requests table */}
-        {rows.length === 0 ? (
+        {/* Requests table */}
+{requestsLoading ? (
+  <div className="rounded-2xl border border-green-200 bg-green-50/40 px-5 py-12 text-center">
+    <p className="text-sm text-stone-600">
+      Loading buyer requests...
+    </p>
+  </div>
+) : rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-green-300 bg-green-50/40 px-5 py-12 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100 text-2xl">
               {onlyAccepted ? "🤝" : "🌱"}
@@ -2594,7 +2669,10 @@ const {
   produce = [],
   users = [],
 } = useApp(); 
- const mine = conns.filter((c) => c.buyerId === user._id);
+const mine = conns.filter(
+  (c) =>
+    String(c.buyerId?._id || c.buyerId) === String(user?._id)
+);
 const navigate = useNavigate();  
 const myReqs = reqs.filter((r) => r.buyerId === user._id);
   const rec = produce.filter((p) => myReqs.some((r) => r.crop.toLowerCase() === (p.crop || "").toLowerCase()));
@@ -2689,8 +2767,9 @@ const myReqs = reqs.filter((r) => r.buyerId === user._id);
         .filter((p) => p.status === "available")
         .map((p) => {
           const farmer = users.find(
-            (u) => u._id === p.farmerId
-          );
+  (u) =>
+    String(u._id) === String(p.farmerId?._id || p.farmerId)
+);
 
           return (
             <article
@@ -2889,8 +2968,13 @@ function ProduceCard({ p }) {
 function BuyerSearch() {
   const { produce } = useApp();
   const [f, setF] = useState({ q: "", district: "", quality: "" });
-  const rows = produce.filter((p) => p.status === "Available" && (p.crop || "").toLowerCase().includes(f.q.toLowerCase())
-    && p.district.toLowerCase().includes(f.district.toLowerCase()) && (!f.quality || p.quality === f.quality));
+const rows = produce.filter(
+  (p) =>
+    String(p.status || "").toLowerCase() === "available" &&
+    (p.crop || "").toLowerCase().includes(f.q.toLowerCase()) &&
+    (p.district || "").toLowerCase().includes(f.district.toLowerCase()) &&
+    (!f.quality || p.quality === f.quality)
+);
   return (
     <Page role="buyer">
       <h1 className="font-serif text-3xl font-semibold text-green-900">Search Produce</h1>
@@ -4078,19 +4162,28 @@ const [produceLoading, setProduceLoading] = useState(true);
 useEffect(() => {
   let cancelled = false;
 
-  api
-    .get("/produce")
-    .then((response) => {
-      if (!cancelled) {
-        setProduce(response.data.produce || []);
-      }
-    })
-    .catch((error) => {
-      console.error(
-        "Unable to load produce:",
-        error.response?.data || error.message
-      );
-    })
+  
+api
+  .get("/produce")
+  .then((response) => {
+    console.log("Produce API response:", response.data);
+
+    const items = Array.isArray(response.data)
+      ? response.data
+      : response.data.produce || [];
+
+    console.log("Produce records loaded:", items.length);
+
+    if (!cancelled) {
+      setProduce(items);
+    }
+  })
+  .catch((error) => {
+    console.error(
+      "Unable to load produce:",
+      error.response?.data || error.message
+    );
+  })
     .finally(() => {
       if (!cancelled) setProduceLoading(false);
     });
@@ -4129,14 +4222,11 @@ useEffect(() => {
       const connections = response.data.connections || [];
 
       setConns(
-        connections.map((c) => ({
-          _id: c.id,
-          buyerId: c.buyerId,
-          farmerId: c.farmerId,
-          produceId: c.produceId,
-          status: c.status,
-        }))
-      );
+  connections.map((c) => ({
+    ...c,
+    _id: c._id || c.id,
+  }))
+);
 
       setUsers((previous) => {
         const profiles = connections

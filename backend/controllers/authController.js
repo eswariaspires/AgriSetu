@@ -11,7 +11,7 @@ export const register = async (req, res) => {
   password,
   role,
   phone,
-  Location,
+  district,
   state,
 } = req.body;
 
@@ -44,13 +44,14 @@ export const register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const user = await User.create({
+    
+const user = await User.create({
   name: name.trim(),
   email: normalizedEmail,
   password: hashedPassword,
   role,
   phone,
-  Location,
+  district,
   state,
 });
 
@@ -62,7 +63,7 @@ export const register = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-  Location: user.Location,
+ district: user.district,
   state: user.state,
       },
     });
@@ -115,7 +116,7 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-  Location: user.Location,
+  district: user.district,
   state: user.state,
       },
     });
